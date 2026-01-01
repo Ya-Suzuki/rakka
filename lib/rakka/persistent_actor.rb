@@ -2,42 +2,85 @@
 
 module Rakka
   class PersistentActor
-    attr_reader :id, :state
+    attr_reader :id
 
     def initialize(id, event_store: Rakka.event_store)
       @id = id
-      @event_store = event_store
-      @state = initial_state
-      recover
+      @stream_id = "#{self.class.name}-#{id}"
+
+      # 復元
+      initial = initial_state
+      past_events = event_store.read_stream(@stream_id)
+      recovered_state = past_events.reduce(initial) do |state, event|
+        apply_event(event, state)
+      end
+
+      # Ractor起動
+      @ractor = Ractor.new(self, event_store.ractor, @stream_id, recovered_state) do |actor, store, stream_id, state|
+        loop do
+          msg = Ractor.receive
+
+          case msg
+          in [:command, command, reply_port]
+            result = actor.handle(command, state)
+
+            case result
+            in [:persist, event]
+              # EventStoreに保存（Port経由で返答を待つ）
+              store_reply = Ractor::Port.new
+              store.send([:append, stream_id, event, store_reply])
+              store_reply.receive  # :ok
+
+              state = actor.apply_event(event, state)
+              reply_port&.send([:ok, event])
+
+            in [:reject, reason]
+              reply_port&.send([:rejected, reason])
+
+            in [:noop]
+              reply_port&.send([:noop])
+            end
+
+          in [:get_state, reply_port]
+            reply_port.send(state)
+          end
+        end
+      end
     end
 
-    # サブクラスでオーバーライド: 初期状態
+    # サブクラスでオーバーライド
     def initial_state
       {}
     end
 
-    # サブクラスでオーバーライド: イベント適用
-    def apply(event)
-      raise NotImplementedError, "#{self.class}#apply must be implemented"
+    # サブクラスでオーバーライド
+    def handle(command, state)
+      raise NotImplementedError
     end
 
-    private
-
-    # イベントを永続化して状態に適用
-    def persist(event)
-      @event_store.append(stream_id, event)
-      apply(event)
+    # サブクラスでオーバーライド
+    def apply_event(event, state)
+      raise NotImplementedError
     end
 
-    # 過去のイベントを再生して状態を復元
-    def recover
-      events = @event_store.read_stream(stream_id)
-      events.each { |event| apply(event) }
+    def state
+      port = Ractor::Port.new
+      @ractor.send([:get_state, port])
+      port.receive
     end
 
-    # ストリームID（Actor識別子）
-    def stream_id
-      "#{self.class.name}-#{@id}"
+    protected
+
+    # 非同期（fire & forget）
+    def send_command(command)
+      @ractor.send([:command, command, nil])
+    end
+
+    # 同期（結果を待つ）
+    def send_command_sync(command)
+      port = Ractor::Port.new
+      @ractor.send([:command, command, port])
+      port.receive
     end
   end
 end

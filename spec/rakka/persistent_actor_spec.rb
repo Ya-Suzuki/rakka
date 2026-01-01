@@ -44,18 +44,10 @@ RSpec.describe Rakka::PersistentActor do
         expect(account.balance).to eq(700)
       end
 
-      it "raises error when insufficient funds" do
-        expect {
-          account.withdraw(BankAccount::Withdraw[2000])
-        }.to raise_error(BankAccount::InsufficientFunds)
-      end
+      it "rejects when insufficient funds" do
+        result = account.withdraw(BankAccount::Withdraw[2000])
 
-      it "does not change balance when rejected" do
-        begin
-          account.withdraw(BankAccount::Withdraw[2000])
-        rescue BankAccount::InsufficientFunds
-        end
-
+        expect(result).to eq([:rejected, :insufficient_funds])
         expect(account.balance).to eq(1000)
       end
     end

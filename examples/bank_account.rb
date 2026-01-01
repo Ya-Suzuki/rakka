@@ -11,33 +11,44 @@ class BankAccount < Rakka::PersistentActor
   MoneyDeposited = Data.define(:amount)
   MoneyWithdrawn = Data.define(:amount)
 
-  # Errors
-  class InsufficientFunds < StandardError; end
-
   def initial_state
     { balance: 0 }
   end
 
   def deposit(cmd)
-    persist(MoneyDeposited[cmd.amount])
+    send_command_sync(cmd)
   end
 
   def withdraw(cmd)
-    raise InsufficientFunds if state[:balance] < cmd.amount
-
-    persist(MoneyWithdrawn[cmd.amount])
+    send_command_sync(cmd)
   end
 
   def balance
     state[:balance]
   end
 
-  def apply(event)
+  # コマンドを処理してイベントを返す
+  def handle(command, state)
+    case command
+    in Deposit(amount:)
+      [:persist, MoneyDeposited[amount]]
+
+    in Withdraw(amount:)
+      if state[:balance] >= amount
+        [:persist, MoneyWithdrawn[amount]]
+      else
+        [:reject, :insufficient_funds]
+      end
+    end
+  end
+
+  # イベントを適用して新しい状態を返す
+  def apply_event(event, state)
     case event
     in MoneyDeposited(amount:)
-      @state = state.merge(balance: state[:balance] + amount)
+      state.merge(balance: state[:balance] + amount)
     in MoneyWithdrawn(amount:)
-      @state = state.merge(balance: state[:balance] - amount)
+      state.merge(balance: state[:balance] - amount)
     end
   end
 end
@@ -61,16 +72,10 @@ if __FILE__ == $0
   account.withdraw(BankAccount::Withdraw[300])
   puts "After withdraw: #{account.balance}"
 
-  # 残高不足
-  begin
-    account.withdraw(BankAccount::Withdraw[1000])
-  rescue BankAccount::InsufficientFunds
-    puts "Withdraw rejected: Insufficient funds"
-  end
+  # 残高不足（拒否される）
+  account.withdraw(BankAccount::Withdraw[1000])
+  puts "After rejected withdraw: #{account.balance}"
 
-  puts "Final balance: #{account.balance}"
-
-  # 復元テスト: 同じIDで新しいインスタンスを作る
   puts "\n--- Recovery test ---"
   recovered = BankAccount.new("account-123")
   puts "Recovered balance: #{recovered.balance}"
