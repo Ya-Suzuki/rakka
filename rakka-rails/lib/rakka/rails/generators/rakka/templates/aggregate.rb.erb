@@ -1,0 +1,36 @@
+# frozen_string_literal: true
+
+class <%= class_name %> < Rakka::PersistentActor
+  # Commands
+  # DoSomething = Data.define(:param)
+
+  # Events
+  # SomethingDone = Data.define(:param)
+
+  def initial_state
+    {}
+  end
+
+  def handle(command, state)
+    case command
+    # in DoSomething(param:)
+    #   [:persist, SomethingDone[param]]
+    else
+      [:noop]
+    end
+  end
+
+  def apply_event(event, state)
+    case event
+    # in SomethingDone(param:)
+    #   state.merge(key: param)
+    else
+      state
+    end
+  end
+
+  # Public interface
+  # def do_something(param)
+  #   send_command_sync(DoSomething[param])
+  # end
+end
