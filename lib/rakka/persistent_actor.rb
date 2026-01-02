@@ -21,6 +21,9 @@ module Rakka
           msg = Ractor.receive
 
           case msg
+          in [:stop]
+            break
+
           in [:command, command, reply_port]
             result = actor.handle(command, state)
 
@@ -67,6 +70,14 @@ module Rakka
       port = Ractor::Port.new
       @ractor.send([:get_state, port])
       port.receive
+    end
+
+    def stop
+      @ractor.send([:stop])
+    end
+
+    def alive?
+      @ractor&.alive? || false
     end
 
     protected
