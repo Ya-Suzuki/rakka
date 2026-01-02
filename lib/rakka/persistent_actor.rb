@@ -24,6 +24,9 @@ module Rakka
           in [:stop]
             break
 
+          in [:ping]
+            # alive?チェック用、何もしない
+
           in [:command, command, reply_port]
             result = actor.handle(command, state)
 
@@ -77,7 +80,12 @@ module Rakka
     end
 
     def alive?
-      @ractor&.alive? || false
+      return false unless @ractor
+      # Ractor#alive?がないので、sendが成功するかで判定
+      @ractor.send([:ping]) rescue false
+      true
+    rescue Ractor::ClosedError
+      false
     end
 
     protected
