@@ -14,7 +14,8 @@
       "Bash(bundle install:*)",
       "Bash(cat:*)",
       "Bash(docker compose:*)",
-      "WebFetch(domain:techracho.bpsinc.jp)"
+      "WebFetch(domain:techracho.bpsinc.jp)",
+      "Bash(tree:*)"
     ]
   }
 }
