@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ruby:*)",
+      "Bash(bundle exec rspec:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(pkill:*)",
+      "Bash(timeout 5 ruby:*)",
+      "Bash(timeout:*)",
+      "Bash(echo:*)",
+      "WebSearch",
+      "WebFetch(domain:product.st.inc)",
+      "Bash(bundle install:*)",
+      "Bash(cat:*)",
+      "Bash(docker compose:*)",
+      "WebFetch(domain:techracho.bpsinc.jp)"
+    ]
+  }
+}

@@ -40,6 +40,13 @@ end
 
 Rakka.configure { |c| c.event_store = Rakka::EventStore::Memory.new }
 
+# イベントハンドラを登録（非同期でも呼ばれる！）
+events_received = []
+Rakka.subscribe(Counter::Incremented) do |event, metadata|
+  events_received << event
+  puts "[Handler] Incremented by #{event.amount} (async)"
+end
+
 counter = Counter.new("async-test")
 
 puts "=== 非同期テスト ==="
@@ -69,6 +76,8 @@ loop do
   sleep 0.001
 end
 
+puts "\nEvents received by handler: #{events_received.size}"
+
 puts "\n=== 同期テスト ==="
 counter2 = Counter.new("sync-test")
 puts "Initial count: #{counter2.count}"
@@ -81,3 +90,5 @@ puts "After sync increment(2): #{counter2.count}"
 
 counter2.increment_sync(3)
 puts "After sync increment(3): #{counter2.count}"
+
+puts "\nTotal events received: #{events_received.size}"

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "rakka/version"
+
 module Rakka
   class Configuration
     attr_accessor :event_store
@@ -66,3 +68,5 @@ require_relative "rakka/event_store/postgres"
 require_relative "rakka/persistent_actor"
 require_relative "rakka/actor_registry"
 require_relative "rakka/supervisor"
+require_relative "rakka/event_bus"
+require_relative "rakka/event_publisher"

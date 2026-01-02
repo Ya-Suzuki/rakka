@@ -4,7 +4,7 @@ module Rakka
   class PersistentActor
     attr_reader :id
 
-    def initialize(id, event_store: Rakka.event_store)
+    def initialize(id, event_store: Rakka.event_store, publisher_port: Rakka.publisher_port)
       @id = id
       @stream_id = "#{self.class.name}-#{id}"
 
@@ -16,7 +16,7 @@ module Rakka
       end
 
       # Ractor起動
-      @ractor = Ractor.new(self, event_store.ractor, @stream_id, recovered_state) do |actor, store, stream_id, state|
+      @ractor = Ractor.new(self, event_store.ractor, @stream_id, recovered_state, publisher_port) do |actor, store, stream_id, state, publisher|
         loop do
           msg = Ractor.receive
 
@@ -38,6 +38,10 @@ module Rakka
               store_reply.receive  # :ok
 
               state = actor.apply_event(event, state)
+
+              # EventPublisherに非同期で通知（Main Threadで処理される）
+              publisher.send([:publish, event, { stream_id: stream_id, actor_id: actor.id }])
+
               reply_port&.send([:ok, event])
 
             in [:reject, reason]
