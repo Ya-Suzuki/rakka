@@ -1,45 +1,136 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Claude Code (claude.ai/code) 向けのプロジェクトガイダンス。
 
-## Project Overview
+## プロジェクト概要
 
-Rakka (Ractor + Akka) - RubyのRactorを使ったアクターベースのイベントソーシングライブラリ。
+**Rakka** (Ractor + Akka) - Ruby 4.0のRactorを使ったアクターベースのイベントソーシングライブラリ。
 
-## Commands
+## パッケージ構成
 
-```bash
-# Install dependencies
-bundle install
-
-# Run all tests
-bundle exec rspec
-
-# Run a single test file
-bundle exec rspec spec/path/to_spec.rb
-
-# Run a specific test by line number
-bundle exec rspec spec/path/to_spec.rb:42
+```
+rakka/
+├── rakka-core/     # コアライブラリ (gem "rakka")
+└── rakka-rails/    # Rails統合 (gem "rakka-rails")
 ```
 
-## Architecture
+## コマンド
 
-The library uses Ruby Ractors to provide true parallelism with memory isolation:
+```bash
+# rakka-core開発
+cd rakka-core
+bundle install
+bundle exec rspec
 
-- **Actor** (`lib/rakka/actor.rb`): Spawns isolated Ractors that receive commands, process domain logic, emit events to the EventStore, and update internal state. Actors communicate via message passing using `Ractor.send` and `Ractor.receive`.
+# PostgreSQLを使ったテスト
+docker compose up -d
+ruby examples/postgres_demo.rb
+```
 
-- **EventStore** (`lib/rakka/event_store.rb`): A dedicated Ractor that receives and persists events from actors. Runs in its own isolated loop collecting domain events.
+## アーキテクチャ
 
-### Message Flow
+### コアコンポーネント (rakka-core/lib/rakka/)
 
-1. External code sends commands to an Actor via `actor.send(command)`
-2. Actor processes the command and validates business rules
-3. If valid, Actor creates an event and sends it to EventStore
-4. Actor updates its own internal state
-5. EventStore persists the event
+| ファイル | 役割 |
+|---------|------|
+| `persistent_actor.rb` | Ractor内で動作するアクター。コマンド処理、イベント永続化、状態管理 |
+| `event_store/memory.rb` | テスト用のインメモリEventStore |
+| `event_store/postgres.rb` | 本番用PostgreSQL EventStore（コネクションプール付き） |
+| `shard_coordinator.rb` | stream_idからシャードへの負荷ベースアサイン |
+| `actor_registry.rb` | Actorのライフサイクル管理、Passivation（アイドル時自動解放） |
+| `supervisor.rb` | Ractor#monitorを使ったクラッシュ検知と自動リスタート |
+| `event_bus.rb` | イベントハンドラの登録と呼び出し |
+| `event_publisher.rb` | Ractor→MainThreadへのイベント橋渡し（Port経由） |
 
-### Key Constraints
+### メッセージフロー
 
-- All messages between Ractors must be frozen or shareable
-- Each Ractor has isolated state - no shared mutable memory
-- Communication is strictly message-based (no shared variables)
+```
+PersistentActor (Ractor)
+    ↓ [:command, cmd, reply_port]
+handle(cmd, state) → [:persist, event]
+    ↓ [:append, stream_id, event, reply_port]
+EventStore (Ractor Worker)
+    ↓ PostgreSQL/Memory
+    ↓ apply_event(event, state) → 新しい状態
+    ↓ [:publish, event, metadata]
+EventPublisher (Port → Thread)
+    ↓
+EventBus (Main Thread) → subscribers
+```
+
+### Ractor通信パターン
+
+```ruby
+# Ractor::Port を使った同期通信
+reply_port = Ractor::Port.new
+ractor.send([:command, cmd, reply_port])
+result = reply_port.receive  # ブロック
+
+# Portなしの非同期通信
+ractor.send([:command, cmd, nil])
+```
+
+## Ractor制約
+
+- **Shareable Objects のみ通信可能**: 数値、Symbol、frozen String、`Data.define`
+- **可変オブジェクト共有不可**: 競合状態を設計レベルで防止
+- **Ractor Safe Gems**: `pg` ○、`sqlite3` ×、`mysql2` ×
+
+## コーディングガイドライン
+
+### コマンド・イベント定義
+
+```ruby
+# Data.define を使う（Ractor間で共有可能）
+Deposit = Data.define(:amount)
+MoneyDeposited = Data.define(:amount)
+
+# 使用例
+event = MoneyDeposited[100]  # または MoneyDeposited.new(amount: 100)
+```
+
+### handle() の戻り値
+
+```ruby
+def handle(command, state)
+  case command
+  in Deposit(amount:)
+    [:persist, MoneyDeposited[amount]]  # イベントを永続化
+  in Withdraw(amount:) if state[:balance] < amount
+    [:reject, :insufficient_funds]       # コマンド拒否
+  else
+    [:noop]                              # 何もしない
+  end
+end
+```
+
+### apply_event() は純粋関数
+
+```ruby
+def apply_event(event, state)
+  case event
+  in MoneyDeposited(amount:)
+    state.merge(balance: state[:balance] + amount)
+  end
+  # 必ず新しいstateを返す（既存stateを変更しない）
+end
+```
+
+## テスト
+
+```bash
+# 全テスト
+bundle exec rspec
+
+# 特定ファイル
+bundle exec rspec spec/rakka/persistent_actor_spec.rb
+
+# 特定行
+bundle exec rspec spec/rakka/persistent_actor_spec.rb:42
+```
+
+## 注意点
+
+- Ruby 4.0+ が必要（Ractor::Port API）
+- PostgreSQL使用時は `pg` gem のみサポート（Ractor safe）
+- Actorの状態はイベントから再構築されるため、イベントは不変であること

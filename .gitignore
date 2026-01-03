@@ -2,3 +2,6 @@
 /vendor/bundle/
 /spec/examples.txt
 .rspec_status
+
+# Claude Code local settings (user-specific)
+.claude/settings.local.json
