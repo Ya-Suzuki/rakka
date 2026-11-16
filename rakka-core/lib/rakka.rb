@@ -20,7 +20,7 @@ module Rakka
     attr_accessor :event_store
 
     # ActorSystem settings
-    attr_writer :shard_count, :passivate_after, :max_actors_per_shard
+    attr_writer :shard_count, :passivate_after, :max_actors_per_shard, :throughput
 
     # PostgreSQL EventStore settings
     attr_writer :postgres_host, :postgres_port,
@@ -39,6 +39,12 @@ module Rakka
     # 1シャードがメモリに保持するアクター数の上限（超えたらLRUで解放）
     def max_actors_per_shard
       @max_actors_per_shard || ENV.fetch("RAKKA_MAX_ACTORS_PER_SHARD", 10_000).to_i
+    end
+
+    # 1つのアクターを続けて処理するメッセージ数。これを超えると、メッセージを持つ
+    # 他のアクターに順番を譲る（小さいほど公平、大きいほど切り替えが減る）
+    def throughput
+      @throughput || ENV.fetch("RAKKA_THROUGHPUT", 5).to_i
     end
 
     def postgres_host
@@ -99,7 +105,8 @@ module Rakka
           event_store: store,
           shard_count: configuration.shard_count,
           passivate_after: configuration.passivate_after,
-          max_actors_per_shard: configuration.max_actors_per_shard
+          max_actors_per_shard: configuration.max_actors_per_shard,
+          throughput: configuration.throughput
         )
       end
     end

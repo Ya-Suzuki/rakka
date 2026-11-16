@@ -38,7 +38,7 @@ ruby examples/postgres_demo.rb
 |---------|------|
 | `persistent_actor.rb` | 集約の定義（`initial_state` / `handle` / `apply_event`）と、コマンドを転送するだけの軽いハンドル。Ractorは持たない |
 | `actor_system.rb` | シャードRactorの起動、`crc32(stream_id) % shard_count` でのルーティング、返信待ちの管理 |
-| `shard.rb` | シャードRactor本体。アクターの復元・コマンド処理・Passivation（アイドル/LRU）・アクター単位のクラッシュ処理 |
+| `shard.rb` | シャードRactor本体。アクターごとのメールボックスとスケジューリング、アクターの復元・コマンド処理・Passivation（アイドル/LRU）・アクター単位のクラッシュ処理 |
 | `supervisor.rb` | Ractor#monitorでシャードRactorの異常終了を検知して再起動 |
 | `event_store/base.rb` | EventStore共通API、`Serialization` |
 | `event_store/memory.rb` | テスト用のインメモリEventStore |
@@ -52,6 +52,8 @@ ruby examples/postgres_demo.rb
 BankAccount.new(id).deposit(...)          # ハンドル（Main Ractor）
     ↓ ActorSystem#ask → [:command, actor_class, id, stream_id, cmd, reply_port]
 Shard (Ractor)                            # stream_idごとに固定のシャード
+    ↓ dispatch: 宛先アクターのメールボックスに入れる
+    ↓ メッセージを持つアクターを順番に throughput 件ずつ処理
     ↓ activate: メモリに無ければ journal.read でイベントを再生
     ↓ handle(cmd, state) → [:persist, event]
     ↓ journal.append(stream_id, expected_version, events)   # 楽観ロック
@@ -61,6 +63,13 @@ EventPublisher (Port → Thread)
     ↓
 EventBus (Main Thread) → subscribers
 ```
+
+### メールボックスとスケジューリング
+
+- メールボックスはアクターごと。`@mailboxes`（stream_id => 未処理メッセージ）は空になったら消すので、Hashの挿入順がそのままランキューになる
+- シャードは先頭のアクターを `throughput` 件（デフォルト5）処理し、残りがあれば列の最後に回す。1つのアクターにコマンドが溜まっても他のアクターを待たせ続けない
+- `Ractor.receive` にはノンブロッキング版が無いので、自分宛てに目印（`DRAINED`）を送り、それを受け取るまで読むことで「今届いている分」だけを振り分ける
+- `[:command]` / `[:get_state]` / `[:passivate]` はメールボックス経由（アクターごとに到着順）。`[:tick]` / `[:stats]` / `[:stop]` はシャード宛てで即時処理
 
 ### EventStoreとJournal
 
@@ -150,7 +159,7 @@ bundle exec rspec spec/rakka/persistent_actor_spec.rb:42
 ## 注意点
 
 - `handle` / `apply_event` / `initial_state` はシャードRactor内で実行される。メインRactorの状態（グローバル変数、非shareableな定数、`Rakka.system`）には触れないこと
-- `handle` の中でブロックすると、同じシャードの他のアクターも待たされる
+- `handle` の中でブロックすると、同じシャードの他のアクターも待たされる（切り替えはメッセージの合間だけで、処理中のメッセージは中断できない）
 - ActorSystemは初回コマンドで起動する（fork後の各プロセスが自分のシャードを持つ）
 
 - Ruby 4.0+ が必要（Ractor::Port API）

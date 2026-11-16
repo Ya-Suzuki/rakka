@@ -109,6 +109,7 @@ Rakka.configure do |c|
   c.shard_count = 4                # シャードRactor数（デフォルト: コア数）
   c.passivate_after = 300          # アイドル何秒でメモリから解放するか
   c.max_actors_per_shard = 10_000  # 1シャードがメモリに保持する上限（LRU）
+  c.throughput = 5                 # 1アクターを続けて処理するメッセージ数
 end
 ```
 
@@ -162,7 +163,7 @@ end
 
 ```ruby
 Rakka.system.stats
-# => { shard_count: 4, active_count: 1234, restarts: {}, shards: [...] }
+# => { shard_count: 4, active_count: 1234, queued: 0, restarts: {}, shards: [...] }
 
 # 明示的に作ることもできる
 system = Rakka::ActorSystem.new(event_store: store, shard_count: 2)
@@ -170,6 +171,10 @@ account = BankAccount.new("account-123", system: system)
 ```
 
 デフォルトの `Rakka.system` は最初のコマンドで起動する。
+
+### メールボックス
+
+メールボックスはアクターごとに持つ。シャードは、メッセージを持つアクターを順番に `throughput` 件ずつ処理する（Akkaのディスパッチャと同じ方式）。あるアクターにコマンドが大量に溜まっていても、同じシャードの他のアクターは `throughput` 件ごとに順番が回ってくる。同じアクター宛てのメッセージは必ず到着順に処理される。
 
 ### EventStore
 

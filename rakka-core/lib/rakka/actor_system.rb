@@ -12,7 +12,7 @@ module Rakka
     attr_reader :event_store, :shard_count
 
     def initialize(event_store:, shard_count: Etc.nprocessors, passivate_after: 300,
-                   max_actors_per_shard: 10_000, max_restarts: 3, within: 60,
+                   max_actors_per_shard: 10_000, throughput: 5, max_restarts: 3, within: 60,
                    publisher_port: Rakka.publisher_port)
       @event_store = event_store
       @shard_count = shard_count
@@ -29,7 +29,8 @@ module Rakka
       shard_count.times do |index|
         @supervisor.supervise(index) do
           Shard.spawn(index, connector, publisher_port,
-                      passivate_after: passivate_after, max_actors: max_actors_per_shard)
+                      passivate_after: passivate_after, max_actors: max_actors_per_shard,
+                      throughput: throughput)
         end
       end
 
@@ -92,6 +93,7 @@ module Rakka
       {
         shard_count: shard_count,
         active_count: shards.sum { |s| s[:active_count] },
+        queued: shards.sum { |s| s[:queued] },
         restarts: @supervisor.children.transform_values { |c| c[:restart_count] },
         shards: shards
       }
