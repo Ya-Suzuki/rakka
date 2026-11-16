@@ -2,34 +2,35 @@
 
 require_relative "../lib/rakka"
 
-# クラッシュする可能性のあるActor
+# 障害は2層で扱う:
+#   1. アクター単位: handle / apply_event の例外 → そのアクターの状態だけ捨てる
+#   2. シャード単位: シャードRactor自体の異常終了 → Supervisorが作り直す
 class UnstableCounter < Rakka::PersistentActor
   Increment = Data.define(:amount)
   Incremented = Data.define(:amount)
   CrashCommand = Data.define
+  KillShard = Data.define
+
+  # StandardErrorではない例外はシャードRactorごと落とす
+  class Fatal < Exception; end # rubocop:disable Lint/InheritException
 
   def initial_state
     { count: 0 }
   end
 
-  def increment(n)
-    send_command_sync(Increment[n])
-  end
+  def increment(n) = send_command_sync(Increment[n])
+  def crash! = send_command_sync(CrashCommand[])
+  def kill_shard! = send_command_sync(KillShard[])
+  def count = state[:count]
 
-  def crash!
-    send_command_sync(CrashCommand[])
-  end
-
-  def count
-    state[:count]
-  end
-
-  def handle(cmd, state)
+  def handle(cmd, _state)
     case cmd
     in Increment(amount:)
       [:persist, Incremented[amount]]
     in CrashCommand
       raise "Intentional crash!"
+    in KillShard
+      raise Fatal, "Intentional shard crash!"
     end
   end
 
@@ -41,61 +42,42 @@ class UnstableCounter < Rakka::PersistentActor
   end
 end
 
-Rakka.configure { |c| c.event_store = Rakka::EventStore::Memory.new }
+system = Rakka::ActorSystem.new(
+  event_store: Rakka::EventStore::Memory.new,
+  shard_count: 1, # 2つのアクターが同じシャードに載ることを見せるため
+  max_restarts: 3,
+  within: 10
+)
 
 puts "=== Supervisor Demo ==="
 
-supervisor = Rakka::Supervisor.new(
-  strategy: :one_for_one,
-  max_restarts: 3,
-  within: 10
-).start
+a = UnstableCounter.new("a", system: system)
+b = UnstableCounter.new("b", system: system)
+a.increment(10)
+b.increment(20)
+puts "a=#{a.count} b=#{b.count} active=#{system.stats[:active_count]}"
 
-# Actorを監視下に置く
-counter = supervisor.supervise(UnstableCounter, "counter-1")
-puts "Created counter, count: #{counter.count}"
-
-counter.increment(10)
-puts "After increment(10): #{counter.count}"
-
-puts "\nChildren: #{supervisor.children.inspect}"
-
-puts "\n--- Triggering crash ---"
-Thread.new do
-  begin
-    counter.crash!
-  rescue => e
-    # クラッシュはRactor内で発生
-  end
+puts "\n--- 1. Actor crash ---"
+begin
+  a.crash!
+rescue Rakka::ActorCrashed => e
+  puts "Caller got: #{e.message}"
 end
+puts "active=#{system.stats[:active_count]} (aだけ破棄、bは同じシャードで生存)"
+puts "a=#{a.count} (イベントから復元) b=#{b.count}"
 
-# 少し待ってリスタートを確認
-sleep 1.5
-
-puts "\nChildren after crash: #{supervisor.children.inspect}"
-
-# 新しいActorを取得（イベントから復元されている）
-new_counter = supervisor.supervise(UnstableCounter, "counter-1")
-puts "Restarted counter count: #{new_counter.count}"
-
-new_counter.increment(5)
-puts "After increment(5): #{new_counter.count}"
-
-puts "\n--- Multiple crashes to hit limit ---"
-3.times do |i|
-  puts "Crash #{i + 1}..."
-  Thread.new do
-    begin
-      c = supervisor.supervise(UnstableCounter, "counter-1")
-      c.crash!
-    rescue
-    end
-  end
-  sleep 1
+puts "\n--- 2. Shard crash ---"
+begin
+  a.kill_shard!
+rescue Rakka::ShardUnavailable => e
+  puts "Caller got: #{e.message}"
 end
+sleep 0.2
+puts "restarts=#{system.stats[:restarts].inspect}"
+puts "a=#{a.count} b=#{b.count} (新しいシャードRactor上で復元)"
 
-sleep 1.5
-puts "\nFinal children: #{supervisor.children.inspect}"
+a.increment(5)
+puts "After increment(5): a=#{a.count}"
 
-supervisor.stop
-puts "\nSupervisor stopped."
+system.stop
+puts "\nSystem stopped."

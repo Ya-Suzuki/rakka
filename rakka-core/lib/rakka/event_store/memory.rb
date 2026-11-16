@@ -1,51 +1,92 @@
 # frozen_string_literal: true
 
+require_relative "base"
+
 module Rakka
   module EventStore
-    class Memory
-      attr_reader :ractor
-
-      def initialize
-        @ractor = Ractor.new do
-          streams = {}
-
-          loop do
-            msg = Ractor.receive
-
-            case msg
-            in [:append, stream_id, event, reply_port]
-              streams[stream_id] ||= []
-              streams[stream_id] << event
-              reply_port.send(:ok)
-
-            in [:read_stream, stream_id, reply_port]
-              events = streams[stream_id] || []
-              reply_port.send(events)
-
-            in [:stream_size, stream_id, reply_port]
-              size = (streams[stream_id] || []).size
-              reply_port.send(size)
-            end
-          end
+    # テスト用。1つのRactorが全ストリームを保持し、各Journalはメッセージで読み書きする
+    class Memory < Base
+      Connector = Data.define(:ractor) do
+        def connect
+          Journal.new(ractor)
         end
       end
 
-      def append(stream_id, event)
-        port = Ractor::Port.new
-        @ractor.send([:append, stream_id, event, port])
-        port.receive
+      class Journal
+        def initialize(ractor)
+          @ractor = ractor
+        end
+
+        def append(stream_id, expected_version, events)
+          case call(:append, stream_id, expected_version, events)
+          in [:ok, version]
+            version
+          in [:conflict, actual]
+            raise ConcurrencyError,
+                  "#{stream_id}: expected version #{expected_version}, actual #{actual}"
+          end
+        end
+
+        def read(stream_id, from_version = 0)
+          call(:read, stream_id, from_version)
+        end
+
+        def size(stream_id)
+          call(:size, stream_id)
+        end
+
+        def close; end
+
+        private
+
+        def call(*message)
+          port = Ractor::Port.new
+          @ractor.send([*message, port])
+          port.receive
+        ensure
+          port&.close
+        end
       end
 
-      def read_stream(stream_id)
-        port = Ractor::Port.new
-        @ractor.send([:read_stream, stream_id, port])
-        port.receive
+      attr_reader :connector
+
+      def initialize
+        super()
+
+        ractor = Ractor.new do
+          streams = Hash.new { |h, k| h[k] = [] }
+
+          loop do
+            case Ractor.receive
+            in [:append, stream_id, expected_version, events, reply]
+              stream = streams[stream_id]
+              if expected_version && expected_version != stream.size
+                reply.send([:conflict, stream.size])
+              else
+                stream.concat(events)
+                reply.send([:ok, stream.size])
+              end
+
+            in [:read, stream_id, from_version, reply]
+              stream = streams.fetch(stream_id, [])
+              reply.send(stream.drop(from_version))
+
+            in [:size, stream_id, reply]
+              reply.send(streams.fetch(stream_id, []).size)
+
+            in [:stop]
+              break
+            end
+          end
+        end
+
+        @connector = Connector.new(ractor)
       end
 
-      def stream_size(stream_id)
-        port = Ractor::Port.new
-        @ractor.send([:stream_size, stream_id, port])
-        port.receive
+      def close
+        @connector.ractor.send([:stop])
+      rescue Ractor::ClosedError
+        nil
       end
     end
   end
