@@ -5,6 +5,7 @@ class Counter < Rakka::PersistentActor
   IncrementTwice = Data.define(:amount)
   Crash = Data.define
   KillShard = Data.define
+  Sleep = Data.define(:seconds)
   Incremented = Data.define(:amount)
 
   # StandardErrorではないので、アクターではなくシャードRactorごと落とす
@@ -17,6 +18,7 @@ class Counter < Rakka::PersistentActor
   def increment(amount = 1) = send_command_sync(Increment[amount])
   def increment_twice(amount) = send_command_sync(IncrementTwice[amount])
   def increment_async(amount = 1) = send_command(Increment[amount])
+  def sleep_async(seconds) = send_command(Sleep[seconds])
   def crash! = send_command_sync(Crash[])
   def kill_shard! = send_command_sync(KillShard[])
   def count = state[:count]
@@ -29,6 +31,9 @@ class Counter < Rakka::PersistentActor
       [:persist, Incremented[amount]]
     in IncrementTwice(amount:)
       [:persist, Incremented[amount], Incremented[amount]]
+    in Sleep(seconds:)
+      sleep seconds
+      [:noop]
     in Crash
       raise "boom"
     in KillShard

@@ -7,16 +7,27 @@ module Rakka
   # （behavior + state + version）でしかない。同じstream_idは必ず同じシャードに
   # 届き、シャードは1メッセージずつ処理するので、アクターごとの直列性が保たれる。
   #
+  # メールボックスはアクターごとに持つ。シャードは届いたメッセージをまず宛先の
+  # メールボックスに振り分け、メッセージを持つアクターを順番に throughput 件ずつ
+  # 処理する（Akkaのディスパッチャと同じ）。1つのアクターにコマンドが溜まっても、
+  # 同じシャードの他のアクターは throughput 件ごとに順番が回ってくる。
+  #
   # Shardのインスタンスは自分のRactorの中だけで生きる（外からはメッセージで操作する）:
   #
+  #   アクター宛て（メールボックスに入り、アクターごとに到着順で処理される）
   #   [:command, actor_class, id, stream_id, command, reply_port | nil]
   #   [:get_state, actor_class, id, stream_id, reply_port]
   #   [:passivate, stream_id, reply_port | nil]
+  #
+  #   シャード宛て（すぐ処理される）
   #   [:tick]              アイドルなアクターの掃除
   #   [:stats, reply_port]
-  #   [:stop]
+  #   [:stop]              溜まっているメッセージを処理し終えてから止まる
   class Shard
     Entry = Struct.new(:behavior, :state, :version, :last_active)
+
+    # 自分宛てに送る目印。これを受け取るまでに届いていた分は振り分け済みと分かる
+    DRAINED = :__rakka_drained__
 
     # 楽観ロック競合時に、状態を読み直してコマンドをやり直す回数
     MAX_CONFLICT_RETRIES = 3
@@ -25,19 +36,27 @@ module Rakka
     # シャードRactorごと落ち、Supervisorが再起動する
     ACTOR_ERRORS = [StandardError, ScriptError].freeze
 
-    def self.spawn(index, connector, publisher_port, passivate_after:, max_actors:)
-      Ractor.new(index, connector, publisher_port, passivate_after, max_actors,
-                 name: "rakka-shard-#{index}") do |i, conn, publisher, idle, max|
-        Rakka::Shard.new(i, conn.connect, publisher, passivate_after: idle, max_actors: max).run
+    def self.spawn(index, connector, publisher_port, passivate_after:, max_actors:, throughput:)
+      Ractor.new(index, connector, publisher_port, passivate_after, max_actors, throughput,
+                 name: "rakka-shard-#{index}") do |i, conn, publisher, idle, max, slice|
+        Rakka::Shard.new(i, conn.connect, publisher,
+                         passivate_after: idle, max_actors: max, throughput: slice).run
       end
     end
 
-    def initialize(index, journal, publisher_port, passivate_after:, max_actors:)
+    def initialize(index, journal, publisher_port, passivate_after:, max_actors:, throughput:)
       @index = index
       @journal = journal
       @publisher = publisher_port
       @passivate_after = passivate_after
       @max_actors = max_actors
+      @throughput = throughput
+
+      # stream_id => 未処理メッセージ。空になったら消すので、ここにあるアクター =
+      # 実行待ちのアクター。挿入順がそのまま実行順（ランキュー）になる
+      @mailboxes = {}
+      @queued = 0
+      @stopping = false
 
       # stream_id => Entry。挿入順 = 最後に使われた順（先頭が最も古い）
       @actors = {}
@@ -46,22 +65,12 @@ module Rakka
     end
 
     def run
-      loop do
-        case Ractor.receive
-        in [:command, actor_class, id, stream_id, command, reply]
-          on_command(actor_class, id, stream_id, command, reply)
-        in [:get_state, actor_class, id, stream_id, reply]
-          on_get_state(actor_class, id, stream_id, reply)
-        in [:passivate, stream_id, reply]
-          @actors.delete(stream_id)
-          respond(reply, :ok)
-        in [:tick]
-          passivate_idle
-        in [:stats, reply]
-          respond(reply, { index: @index, active_count: @actors.size,
-                           processed: @processed, crashes: @crashes })
-        in [:stop]
-          break
+      until @stopping && @mailboxes.empty?
+        if @mailboxes.empty?
+          dispatch(Ractor.receive) # 仕事が無いので届くまで待つ
+        else
+          drain
+          run_next_actor
         end
       end
     ensure
@@ -69,6 +78,57 @@ module Rakka
     end
 
     private
+
+    # メッセージをアクターのメールボックスに入れる。シャード宛てはその場で処理する
+    def dispatch(message)
+      case message
+      in [:command | :get_state, _, _, stream_id, *]
+        enqueue(stream_id, message)
+      in [:passivate, stream_id, _]
+        enqueue(stream_id, message)
+      in [:tick]
+        passivate_idle
+      in [:stats, reply]
+        respond(reply, { index: @index, active_count: @actors.size, queued: @queued,
+                         processed: @processed, crashes: @crashes })
+      in [:stop]
+        @stopping = true
+      end
+    end
+
+    def enqueue(stream_id, message)
+      (@mailboxes[stream_id] ||= []) << message
+      @queued += 1
+    end
+
+    # すでに届いているメッセージを、ブロックせずに全部メールボックスへ振り分ける
+    def drain
+      Ractor.current.send(DRAINED)
+      until (message = Ractor.receive) == DRAINED
+        dispatch(message)
+      end
+    end
+
+    # 先頭のアクターを throughput 件まで処理し、残りがあれば列の最後に回す
+    def run_next_actor
+      stream_id, mailbox = @mailboxes.shift
+
+      mailbox.shift(@throughput).each do |message|
+        @queued -= 1
+
+        case message
+        in [:command, actor_class, id, _, command, reply]
+          on_command(actor_class, id, stream_id, command, reply)
+        in [:get_state, actor_class, id, _, reply]
+          on_get_state(actor_class, id, stream_id, reply)
+        in [:passivate, _, reply]
+          @actors.delete(stream_id)
+          respond(reply, :ok)
+        end
+      end
+
+      @mailboxes[stream_id] = mailbox unless mailbox.empty?
+    end
 
     def on_command(actor_class, id, stream_id, command, reply)
       attempts = 0

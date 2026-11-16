@@ -72,6 +72,74 @@ RSpec.describe Rakka::ActorSystem do
     end
   end
 
+  describe "mailboxes" do
+    let(:port) { Ractor::Port.new }
+    let(:system) do
+      described_class.new(event_store: event_store, shard_count: 1, throughput: 2, publisher_port: port)
+    end
+
+    # シャードを塞いでおき、その間に送ったメッセージが全部メールボックスに溜まった
+    # 状態から処理が始まるようにする
+    def while_shard_is_busy
+      counter("blocker").sleep_async(0.2)
+      yield
+    end
+
+    def published_actor_ids(count)
+      Array.new(count) { port.receive.last[:actor_id] }
+    end
+
+    it "does not let a busy actor starve the others" do
+      while_shard_is_busy do
+        6.times { counter("busy").increment_async }
+        counter("other").increment_async
+      end
+
+      # busyに6件溜まっていても、2件(throughput)処理したところでotherに順番が回る
+      expect(published_actor_ids(7)).to eq(%w[busy busy other busy busy busy busy])
+    end
+
+    it "takes turns between actors that both have a backlog" do
+      while_shard_is_busy do
+        4.times { counter("a").increment_async }
+        4.times { counter("b").increment_async }
+      end
+
+      expect(published_actor_ids(8)).to eq(%w[a a b b a a b b])
+    end
+
+    it "keeps each actor's messages in arrival order" do
+      while_shard_is_busy do
+        (1..7).each { |i| counter("a").increment_async(i) }
+        (1..7).each { |i| counter("b").increment_async(i * 10) }
+      end
+
+      expect(counter("a").count).to eq(28)
+      expect(event_store.read_stream("Counter-a").map(&:amount)).to eq((1..7).to_a)
+      expect(event_store.read_stream("Counter-b").map(&:amount)).to eq((1..7).map { |i| i * 10 })
+    end
+
+    it "reports the backlog in stats" do
+      counter("blocker").sleep_async(0.3)
+      sleep 0.05 # blockerの処理が始まるのを待つ
+      3.times { counter("a").increment_async }
+
+      # statsはシャード宛てなので、次の振り分けのタイミングで（aの処理より前に）答えが返る
+      expect(system.stats).to include(queued: 3)
+      expect(counter("a").count).to eq(3)
+      expect(system.stats).to include(queued: 0)
+    end
+
+    it "finishes queued messages before stopping" do
+      while_shard_is_busy do
+        5.times { counter("a").increment_async }
+      end
+      system.stop
+
+      expect(event_store.stream_size("Counter-a")).to eq(5)
+    end
+  end
+
   describe "event publishing" do
     it "publishes persisted events with metadata" do
       port = Ractor::Port.new
