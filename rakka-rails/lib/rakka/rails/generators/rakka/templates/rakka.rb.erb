@@ -2,8 +2,16 @@
 
 # Rakka configuration
 Rails.application.config.rakka = {
-  # Number of database connections for EventStore
-  pool_size: 5,
+  # Number of shard Ractors per process (default: number of CPU cores).
+  # Actors are multiplexed onto these, so this sets parallelism, not actor count.
+  # Each shard holds one database connection (+1 for the main thread).
+  # shard_count: 4,
+
+  # Release an actor's in-memory state after this many idle seconds (default: 300)
+  # passivate_after: 300,
+
+  # Max actors kept in memory per shard, evicted LRU (default: 10_000)
+  # max_actors_per_shard: 10_000,
 
   # Database configuration to use (from database.yml)
   database_config_name: :primary,

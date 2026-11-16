@@ -3,17 +3,19 @@
 **Ractor-based Actor Event Sourcing for Ruby**
 
 RubyのRactor（Ruby 4.0+）を使った、アクターベースのイベントソーシングライブラリ。
-Akkaにインスパイアされた設計で、真の並列処理とメモリ隔離を実現。
+Akkaにインスパイアされた設計で、少数のRactor上に多数の軽量アクターを載せる。
 
 名前の由来: **Ra**ctor + **Akka** = **Rakka**
 
 ## 特徴
 
 - **Ractor Native**: GVLを回避した真の並列処理
+- **軽量アクター**: アクターはRactorではなくシャードRactor内のエントリ。数万アクターでもRactorはコア数程度
 - **Event Sourcing**: イベントを永続化し、状態を再構築可能
 - **Actor Model**: メッセージパッシングによる安全な並行処理
-- **Passivation**: アイドル時にActorを自動解放してメモリ節約
-- **Supervisor**: クラッシュ検知と自動リスタート
+- **楽観ロック**: 複数プロセスから同じ集約に書いても整合する
+- **Passivation**: アイドル時・上限超過時にActorを自動解放してメモリ節約
+- **Let it crash**: アクターの例外は状態を捨てて復元、シャードRactorの異常終了は自動リスタート
 - **EventBus**: 非同期イベントハンドリング
 
 ## パッケージ構成
@@ -98,12 +100,15 @@ Rakka.configure do |c|
 
   # PostgreSQL（本番用）
   c.event_store = Rakka::EventStore::Postgres.new(
-    pool_size: 5,
     host: "localhost",
     dbname: "myapp",
     user: "postgres",
     password: "password"
   )
+
+  c.shard_count = 4                # シャードRactor数（デフォルト: コア数）
+  c.passivate_after = 300          # アイドル何秒でメモリから解放するか
+  c.max_actors_per_shard = 10_000  # 1シャードがメモリに保持する上限（LRU）
 end
 ```
 
@@ -138,43 +143,57 @@ end
 
 ### PersistentActor
 
-Ractor内で動作するアクター。コマンドを受け取り、イベントを永続化し、状態を管理。
+集約の定義。インスタンスはRactorを持たない軽いハンドルで、コマンドはシャードRactorに転送される。
 
 ```ruby
 class MyActor < Rakka::PersistentActor
   def initial_state       # 初期状態
-  def handle(cmd, state)  # コマンド処理 → [:persist, event] | [:reject, reason] | [:noop]
+  def handle(cmd, state)  # コマンド処理 → [:persist, event, ...] | [:reject, reason] | [:noop]
   def apply_event(e, s)   # イベント適用 → 新しい状態
 end
 ```
 
+`send_command_sync` の戻り値は `[:ok, event]` / `[:rejected, reason]` / `[:noop]`。
+`handle` / `apply_event` が例外を投げた場合は `Rakka::ActorCrashed` が呼び出し側に上がる。
+
+### ActorSystem
+
+シャードRactorの集合。`stream_id` のハッシュでシャードを決めるので、同じ集約のコマンドは常に同じシャードで直列に処理される。
+
+```ruby
+Rakka.system.stats
+# => { shard_count: 4, active_count: 1234, restarts: {}, shards: [...] }
+
+# 明示的に作ることもできる
+system = Rakka::ActorSystem.new(event_store: store, shard_count: 2)
+account = BankAccount.new("account-123", system: system)
+```
+
+デフォルトの `Rakka.system` は最初のコマンドで起動する。
+
 ### EventStore
 
-イベントの永続化を担当。
+イベントの永続化を担当。追記は期待バージョンつきの楽観ロックで、競合したらシャードが状態を読み直してコマンドを判定し直す。
 
 | Store | 用途 | 特徴 |
 |-------|------|------|
 | `Memory` | テスト | Ractor内のHashに保存 |
-| `Postgres` | 本番 | コネクションプール + ShardCoordinator |
+| `Postgres` | 本番 | シャードごとに1コネクション、`UNIQUE(stream_id, position)` で競合検出 |
 
-### ActorRegistry
+### Passivation
 
-Actorのライフサイクル管理。Passivation（アイドル時解放）をサポート。
-
-```ruby
-registry = Rakka::ActorRegistry.new(passivate_after: 30)  # 30秒でpassivate
-actor = registry.get_or_create(BankAccount, "account-123")
-```
-
-### Supervisor
-
-Actorのクラッシュ検知と自動リスタート。
+メモリ上のアクター状態は、`passivate_after` 秒アイドルが続くか、シャードの保持数が `max_actors_per_shard` を超えると解放される。次のコマンドでイベントから復元される。
 
 ```ruby
-supervisor = Rakka::Supervisor.new(max_restarts: 3, within: 60).start
-actor = supervisor.supervise(MyActor, "id-1")
-# クラッシュ時は自動リスタート（3回/60秒まで）
+account.stop  # 明示的に解放
 ```
+
+### 障害処理
+
+| 層 | きっかけ | 動作 |
+|----|---------|------|
+| アクター | `handle` / `apply_event` の例外 | そのアクターの状態だけ破棄。同じシャードの他のアクターは影響なし |
+| シャード | シャードRactorの異常終了 | `Supervisor` が再起動（デフォルト3回/60秒まで）。アクターは順次復元 |
 
 ### EventBus
 
@@ -204,23 +223,37 @@ ruby examples/postgres_demo.rb
 ## アーキテクチャ
 
 ```
-┌─────────────────┐     ┌──────────────────────┐
-│  PersistentActor │────▶│  EventStore (Ractor) │
-│    (Ractor)      │     │  ┌─────────────────┐ │
-│                  │     │  │ Worker Pool     │ │
-│  - handle()      │     │  │ (PostgreSQL)    │ │
-│  - apply_event() │     │  └─────────────────┘ │
-└────────┬─────────┘     └──────────────────────┘
-         │
-         ▼
+ BankAccount.new(id)          ハンドル（Ractorなし）
+        │ command
+        ▼
+┌──────────────────────────────────────────────┐
+│ ActorSystem   crc32(stream_id) % shard_count │
+└───────┬──────────────────────┬───────────────┘
+        ▼                      ▼
+┌────────────────┐     ┌────────────────┐
+│ Shard (Ractor) │     │ Shard (Ractor) │  … コア数ぶん（Supervisorが監視）
+│ actors = {     │     │ actors = {     │
+│  id => state,  │     │  id => state,  │  ← アクターはここのエントリ
+│  id => state } │     │  id => state } │
+│ Journal        │     │ Journal        │
+└───┬────────┬───┘     └───┬────────┬───┘
+    │        │ append(expected_version)
+    │        ▼             │        ▼
+    │   ┌──────────────────────────────┐
+    │   │ EventStore (PostgreSQL等)    │
+    │   └──────────────────────────────┘
+    ▼ publish              ▼
 ┌─────────────────┐     ┌──────────────────────┐
 │ EventPublisher  │────▶│  EventBus            │
 │   (Port)        │     │  (Main Thread)       │
-│                 │     │  - subscribe()       │
-│                 │     │  - Read Model更新    │
-│                 │     │  - ActionCable       │
 └─────────────────┘     └──────────────────────┘
 ```
+
+### Railsで使う場合
+
+- シャードRactorはプロセスごとに持つ。Pumaのクラスタモードでは各ワーカーが独立したActorSystemになる
+- ワーカーをまたいだ同時書き込みは楽観ロックで検出・再試行されるので整合性は保たれる（メモリ上のアクターは「単一ライターの保証」ではなく「状態キャッシュ + プロセス内の直列化」）
+- PostgreSQLのコネクション数は、プロセスあたり `shard_count + 1`
 
 ## Ractor制約
 

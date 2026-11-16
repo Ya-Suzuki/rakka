@@ -1,61 +1,33 @@
 # frozen_string_literal: true
 
 module Rakka
+  # イベントソーシングされるアクター（集約）の定義と、それを操作するハンドル。
+  #
+  # サブクラスは initial_state / handle / apply_event を定義する。これらは
+  # シャードRactorの中で呼ばれる。インスタンス（BankAccount.new("id")）は
+  # Ractorもスレッドも持たない軽いハンドルで、コマンドをActorSystemに転送するだけ。
+  # アクターの状態はシャードのメモリ上にあり、無ければイベントから復元される。
   class PersistentActor
     attr_reader :id
 
-    def initialize(id, event_store: Rakka.event_store, publisher_port: Rakka.publisher_port)
+    class << self
+      def stream_id(id)
+        "#{name}-#{id}"
+      end
+
+      # シャードRactor内で handle / apply_event を呼ぶためのインスタンスを作る
+      def behavior(id)
+        allocate.tap { |actor| actor.instance_variable_set(:@id, id) }
+      end
+    end
+
+    def initialize(id, system: nil)
       @id = id
-      @stream_id = "#{self.class.name}-#{id}"
+      @system = system
+    end
 
-      # 復元
-      initial = initial_state
-      past_events = event_store.read_stream(@stream_id)
-      recovered_state = past_events.reduce(initial) do |state, event|
-        apply_event(event, state)
-      end
-
-      # Ractor起動
-      @ractor = Ractor.new(self, event_store.ractor, @stream_id, recovered_state, publisher_port) do |actor, store, stream_id, state, publisher|
-        loop do
-          msg = Ractor.receive
-
-          case msg
-          in [:stop]
-            break
-
-          in [:ping]
-            # alive?チェック用、何もしない
-
-          in [:command, command, reply_port]
-            result = actor.handle(command, state)
-
-            case result
-            in [:persist, event]
-              # EventStoreに保存（Port経由で返答を待つ）
-              store_reply = Ractor::Port.new
-              store.send([:append, stream_id, event, store_reply])
-              store_reply.receive  # :ok
-
-              state = actor.apply_event(event, state)
-
-              # EventPublisherに非同期で通知（Main Threadで処理される）
-              publisher.send([:publish, event, { stream_id: stream_id, actor_id: actor.id }])
-
-              reply_port&.send([:ok, event])
-
-            in [:reject, reason]
-              reply_port&.send([:rejected, reason])
-
-            in [:noop]
-              reply_port&.send([:noop])
-            end
-
-          in [:get_state, reply_port]
-            reply_port.send(state)
-          end
-        end
-      end
+    def stream_id
+      self.class.stream_id(id)
     end
 
     # サブクラスでオーバーライド
@@ -64,46 +36,41 @@ module Rakka
     end
 
     # サブクラスでオーバーライド
+    #   => [:persist, event, ...] | [:reject, reason] | [:noop]
     def handle(command, state)
       raise NotImplementedError
     end
 
-    # サブクラスでオーバーライド
+    # サブクラスでオーバーライド。純粋関数であること
     def apply_event(event, state)
       raise NotImplementedError
     end
 
     def state
-      port = Ractor::Port.new
-      @ractor.send([:get_state, port])
-      port.receive
+      system.state_of(self.class, id)
     end
 
+    # メモリ上の状態を解放する（Passivation）。次のコマンドで復元される
     def stop
-      @ractor.send([:stop])
-    end
-
-    def alive?
-      return false unless @ractor
-      # Ractor#alive?がないので、sendが成功するかで判定
-      @ractor.send([:ping]) rescue false
-      true
-    rescue Ractor::ClosedError
-      false
+      system.passivate(self.class, id)
     end
 
     protected
 
     # 非同期（fire & forget）
     def send_command(command)
-      @ractor.send([:command, command, nil])
+      system.tell(self.class, id, command)
     end
 
     # 同期（結果を待つ）
     def send_command_sync(command)
-      port = Ractor::Port.new
-      @ractor.send([:command, command, port])
-      port.receive
+      system.ask(self.class, id, command)
+    end
+
+    private
+
+    def system
+      @system || Rakka.system
     end
   end
 end

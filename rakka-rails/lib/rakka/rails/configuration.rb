@@ -3,10 +3,9 @@
 module Rakka
   module Rails
     class Configuration
-      attr_accessor :pool_size, :database_config_name
+      attr_accessor :shard_count, :passivate_after, :max_actors_per_shard, :database_config_name
 
       def initialize
-        @pool_size = 5
         @database_config_name = :primary
       end
 
@@ -31,10 +30,7 @@ module Rakka
       end
 
       def build_event_store
-        Rakka::EventStore::Postgres.new(
-          pool_size: pool_size,
-          **database_options
-        )
+        Rakka::EventStore::Postgres.new(**database_options)
       end
     end
 

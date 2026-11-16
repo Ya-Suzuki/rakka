@@ -1,13 +1,14 @@
 # frozen_string_literal: true
 
 require "pg"
-require "json"
-require "securerandom"
-require_relative "../shard_coordinator"
+require_relative "base"
 
 module Rakka
   module EventStore
-    class Postgres
+    # 本番用。Journalごとに1コネクションを持つ（シャードRactor数 + メイン用1本）。
+    # 同時書き込みは UNIQUE(stream_id, position) による楽観ロックで検出するので、
+    # 複数プロセス（Pumaワーカー等）が同じストリームに書いても壊れない
+    class Postgres < Base
       SCHEMA = <<~SQL
         CREATE TABLE IF NOT EXISTS rakka_events (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -24,198 +25,95 @@ module Rakka
           ON rakka_events(stream_id);
       SQL
 
-      attr_reader :coordinator
-
-      def initialize(pool_size: nil, connection_string: nil, **options)
-        config = Rakka.configuration
-        @pool_size = pool_size || config.postgres_pool_size
-        @connection_string = connection_string
-        @options = options.empty? ? config.postgres_options : options
-        @coordinator = ShardCoordinator.new(shard_count: @pool_size)
-
-        # ワーカーRactorプールを作成
-        frozen_opts = Ractor.make_shareable(@options.transform_keys(&:to_s))
-        frozen_conn_str = @connection_string&.freeze
-
-        @workers = @pool_size.times.map do |i|
-          Ractor.new(i, frozen_conn_str, frozen_opts) do |worker_id, conn_str, opts|
-            conn = if conn_str
-                     PG.connect(conn_str)
-                   else
-                     symbolized = opts.transform_keys(&:to_sym)
-                     PG.connect(**symbolized)
-                   end
-
-            loop do
-              msg = Ractor.receive
-
-              case msg
-              in [:append, stream_id, event_id, event_type, data, reply_port]
-                begin
-                  result = conn.exec_params(<<~SQL, [event_id, stream_id, event_type, data])
-                    INSERT INTO rakka_events (id, stream_id, position, event_type, data)
-                    VALUES (
-                      $1::uuid,
-                      $2::varchar,
-                      (SELECT COALESCE(MAX(position) + 1, 0) FROM rakka_events WHERE stream_id = $2::varchar),
-                      $3::varchar,
-                      $4::jsonb
-                    )
-                    RETURNING position
-                  SQL
-                  reply_port.send(:ok)
-                rescue PG::UniqueViolation => e
-                  reply_port.send([:error, :conflict])
-                rescue => e
-                  reply_port.send([:error, e.message])
-                end
-
-              in [:read_stream, stream_id, reply_port]
-                result = conn.exec_params(<<~SQL, [stream_id])
-                  SELECT event_type, data FROM rakka_events
-                  WHERE stream_id = $1
-                  ORDER BY position
-                SQL
-                reply_port.send(result.map { |row| [row["event_type"], row["data"]] })
-
-              in [:stream_size, stream_id, reply_port]
-                result = conn.exec_params(<<~SQL, [stream_id])
-                  SELECT COUNT(*) FROM rakka_events WHERE stream_id = $1
-                SQL
-                reply_port.send(result[0]["count"].to_i)
-              end
-            end
-          end
+      Connector = Data.define(:connection_string, :options) do
+        def connect
+          Journal.new(connection_string ? PG.connect(connection_string) : PG.connect(**options))
         end
+      end
+
+      class Journal
+        def initialize(conn)
+          @conn = conn
+        end
+
+        # 複数イベントを1文（=1トランザクション）で書く
+        def append(stream_id, expected_version, events)
+          return expected_version || size(stream_id) if events.empty?
+
+          base = expected_version || size(stream_id)
+          params = []
+          rows = events.each_with_index.map do |event, i|
+            n = params.size
+            params.push(
+              event.respond_to?(:id) ? event.id : SecureRandom.uuid_v7,
+              stream_id,
+              base + i,
+              event.class.name,
+              Serialization.dump(event)
+            )
+            "($#{n + 1}::uuid, $#{n + 2}::varchar, $#{n + 3}::int, $#{n + 4}::varchar, $#{n + 5}::jsonb)"
+          end
+
+          exec(<<~SQL, params)
+            INSERT INTO rakka_events (id, stream_id, position, event_type, data)
+            VALUES #{rows.join(", ")}
+          SQL
+
+          base + events.size
+        rescue PG::UniqueViolation
+          raise ConcurrencyError, "#{stream_id}: version #{base} was already written"
+        end
+
+        def read(stream_id, from_version = 0)
+          result = exec(<<~SQL, [stream_id, from_version])
+            SELECT event_type, data FROM rakka_events
+            WHERE stream_id = $1 AND position >= $2::int
+            ORDER BY position
+          SQL
+          result.map { |row| Serialization.load(row["event_type"], row["data"]) }
+        end
+
+        def size(stream_id)
+          result = exec(<<~SQL, [stream_id])
+            SELECT COALESCE(MAX(position) + 1, 0) AS size FROM rakka_events WHERE stream_id = $1
+          SQL
+          result[0]["size"].to_i
+        end
+
+        def close
+          @conn.close
+        rescue PG::Error
+          nil
+        end
+
+        private
+
+        def exec(sql, params)
+          @conn.exec_params(sql, params)
+        rescue PG::ConnectionBad, PG::UnableToSend
+          # 接続が切れていたら張り直す。今回のコマンドは失敗させ、次から復帰する
+          @conn.reset
+          raise
+        end
+      end
+
+      attr_reader :connector
+
+      def initialize(connection_string: nil, **options)
+        super()
+        options = Rakka.configuration.postgres_options if options.empty? && connection_string.nil?
+        @connector = Connector.new(
+          connection_string: connection_string&.dup&.freeze,
+          options: Ractor.make_shareable(options.transform_keys(&:to_sym).dup)
+        )
       end
 
       def self.create_schema(connection_string: nil, **options)
-        conn = if connection_string
-                 PG.connect(connection_string)
-               else
-                 PG.connect(**options)
-               end
+        conn = connection_string ? PG.connect(connection_string) : PG.connect(**options)
         conn.exec(SCHEMA)
-        conn.close
-      end
-
-      def ractor
-        # PersistentActor互換用: coordinatorで振り分けるラッパーRactorを返す
-        @router ||= create_router
-      end
-
-      def append(stream_id, event)
-        port = Ractor::Port.new
-        worker = worker_for(stream_id)
-        event_id = event.respond_to?(:id) ? event.id : SecureRandom.uuid_v7
-        event_type = event.class.name
-        data = serialize_event(event)
-        worker.send([:append, stream_id, event_id, event_type, data, port])
-        port.receive
-      end
-
-      def read_stream(stream_id)
-        port = Ractor::Port.new
-        worker = worker_for(stream_id)
-        worker.send([:read_stream, stream_id, port])
-        rows = port.receive
-        rows.map { |event_type, data| deserialize_event(event_type, data) }
-      end
-
-      def stream_size(stream_id)
-        port = Ractor::Port.new
-        worker = worker_for(stream_id)
-        worker.send([:stream_size, stream_id, port])
-        port.receive
-      end
-
-      def release(stream_id)
-        @coordinator.release(stream_id)
-      end
-
-      def stats
-        @coordinator.stats
-      end
-
-      private
-
-      def worker_for(stream_id)
-        shard_idx = @coordinator.get_shard(stream_id)
-        @workers[shard_idx]
-      end
-
-      def create_router
-        workers = @workers
-        coordinator_ractor = @coordinator.ractor
-
-        Ractor.new(workers, coordinator_ractor) do |pool, coord|
-          loop do
-            msg = Ractor.receive
-
-            case msg
-            in [:append, stream_id, event, reply_port]
-              # coordinatorに問い合わせ
-              coord_port = Ractor::Port.new
-              coord.send([:get_shard, stream_id, coord_port])
-              shard_idx = coord_port.receive
-
-              event_id = event.respond_to?(:id) ? event.id : SecureRandom.uuid_v7
-              event_type = event.class.name
-              data = serialize_event(event)
-
-              pool[shard_idx].send([:append, stream_id, event_id, event_type, data, reply_port])
-
-            in [:read_stream, stream_id, reply_port]
-              coord_port = Ractor::Port.new
-              coord.send([:get_shard, stream_id, coord_port])
-              shard_idx = coord_port.receive
-
-              # 生データを受け取ってそのまま返す
-              worker_port = Ractor::Port.new
-              pool[shard_idx].send([:read_stream, stream_id, worker_port])
-              rows = worker_port.receive
-              events = rows.map { |event_type, data| deserialize_event(event_type, data) }
-              reply_port.send(events)
-
-            in [:stream_size, stream_id, reply_port]
-              coord_port = Ractor::Port.new
-              coord.send([:get_shard, stream_id, coord_port])
-              shard_idx = coord_port.receive
-
-              pool[shard_idx].send([:stream_size, stream_id, reply_port])
-            end
-          end
-        end
-      end
-
-      def serialize_event(event)
-        members = event.class.members
-        hash = members.each_with_object({}) do |key, h|
-          h[key] = event.send(key)
-        end
-        JSON.generate(hash)
-      end
-
-      def deserialize_event(event_type, json_data)
-        klass = Object.const_get(event_type)
-        data = JSON.parse(json_data, symbolize_names: true)
-        klass.new(**data)
+      ensure
+        conn&.close
       end
     end
   end
-end
-
-# Ractor内で使うためのグローバル関数
-def serialize_event(event)
-  members = event.class.members
-  hash = members.each_with_object({}) do |key, h|
-    h[key] = event.send(key)
-  end
-  JSON.generate(hash)
-end
-
-def deserialize_event(event_type, json_data)
-  klass = Object.const_get(event_type)
-  data = JSON.parse(json_data, symbolize_names: true)
-  klass.new(**data)
 end
