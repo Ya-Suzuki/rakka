@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <title><%= content_for(:title) || "Auction House" %></title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="application-name" content="Auction House">
+    <meta name="mobile-web-app-capable" content="yes">
+    <%= csrf_meta_tags %>
+    <%= csp_meta_tag %>
+    <%= stylesheet_link_tag :app %>
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="container site-header__inner">
+        <%= link_to "Auction House", root_path, class: "brand" %>
+        <span class="brand-sub">Rakka + Rails のイベントソーシング・サンプル</span>
+        <%= form_with url: session_path, method: :patch, class: "who" do |f| %>
+          <label for="name">あなた</label>
+          <%= f.text_field :name, id: "name", value: current_user, size: 12 %>
+          <%= f.submit "切り替え", class: "btn btn--ghost" %>
+        <% end %>
+      </div>
+    </header>
+
+    <main class="container">
+      <% if notice %><p class="flash flash--notice"><%= notice %></p><% end %>
+      <% if alert %><p class="flash flash--alert"><%= alert %></p><% end %>
+      <%= yield %>
+    </main>
+  </body>
+</html>

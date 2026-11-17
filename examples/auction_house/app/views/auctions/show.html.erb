@@ -1,0 +1,68 @@
+<% content_for :title, "#{@state[:title]} | Auction House" %>
+<% live = @at.nil? %>
+
+<p class="back"><%= link_to "← 出品一覧", root_path %></p>
+
+<div class="layout">
+  <section>
+    <% unless live %>
+      <div class="timetravel">
+        <strong>v<%= @at %> 時点の状態</strong>（<%= @events[@at - 1].created_at.strftime("%Y-%m-%d %H:%M:%S") %>）を、イベント1〜<%= @at %>を再生して表示しています。
+        <%= link_to "現在に戻る", auction_path(@auction_id) %>
+      </div>
+    <% end %>
+
+    <div class="card auction">
+      <div class="auction__head">
+        <h1><%= @state[:title] %></h1>
+        <span class="badge badge--<%= @state[:status] == :open ? "open" : (@state[:winner] ? "sold" : "unsold") %>"><%= state_status_label(@state) %></span>
+      </div>
+      <p class="muted">出品者 <%= @state[:seller] %> ・ 開始 <%= yen(@state[:starting_price]) %><% if @state[:buyout_price] %> ・ 即決 <%= yen(@state[:buyout_price]) %><% end %></p>
+
+      <dl class="stats">
+        <div><dt><%= @state[:status] == :closed ? "落札価格" : "現在価格" %></dt><dd class="price"><%= yen(@state[:status] == :closed ? @state[:final_price] : @state[:price] || @state[:starting_price]) %></dd></div>
+        <div><dt><%= @state[:status] == :closed ? "落札者" : "最高額の入札者" %></dt><dd><%= (@state[:status] == :closed ? @state[:winner] : @state[:leader]) || "—" %></dd></div>
+        <div><dt>入札数</dt><dd><%= @state[:bid_count] %>件（<%= @state[:bidders].size %>人）</dd></div>
+      </dl>
+
+      <% if live && @state[:status] == :open %>
+        <% if current_user == @state[:seller] %>
+          <%= button_to "出品を終了する", close_auction_path(@auction_id), class: "btn btn--danger",
+                        form: { onsubmit: "return confirm('終了しますか？')" } %>
+        <% else %>
+          <%= form_with url: auction_bids_path(@auction_id), class: "bid" do |f| %>
+            <%= f.number_field :amount, min: Auction.minimum_bid(@state), value: Auction.minimum_bid(@state), required: true, "aria-label": "入札額" %>
+            <%= f.submit "入札する", class: "btn" %>
+          <% end %>
+          <p class="muted">最低入札額 <%= yen(Auction.minimum_bid(@state)) %>（<%= yen(Auction::MIN_INCREMENT) %> 単位で上乗せ）</p>
+        <% end %>
+      <% end %>
+    </div>
+
+    <p class="hint">
+      <% if live %>
+        この状態は<strong>アクターから直接</strong>取得した最新のものです。一覧（読みモデル）への反映: v<%= @listing_version %> / v<%= @events.size %>
+      <% else %>
+        過去の状態はどこにも保存されていません。イベントを <code>apply_event</code> で順に適用し直して作っています。
+      <% end %>
+    </p>
+  </section>
+
+  <aside>
+    <div class="card">
+      <h2>イベント履歴</h2>
+      <p class="muted">行をクリックすると、その時点の状態に戻って表示します。</p>
+      <ol class="timeline">
+        <% @events.each do |stored| %>
+          <% event = stored.event %>
+          <li class="timeline__item timeline__item--<%= event_label(event) == "入札" ? "bid" : "other" %> <%= "is-current" if @at == stored.version %> <%= "is-future" if @at && stored.version > @at %>">
+            <%= link_to auction_path(@auction_id, at: stored.version), class: "timeline__link" do %>
+              <span class="timeline__meta">v<%= stored.version %> ・ <%= event_label(event) %> ・ <%= stored.created_at.strftime("%H:%M:%S") %></span>
+              <span><%= describe_event(event) %></span>
+            <% end %>
+          </li>
+        <% end %>
+      </ol>
+    </div>
+  </aside>
+</div>
