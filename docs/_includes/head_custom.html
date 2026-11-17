@@ -1,0 +1,13 @@
+<script>
+  /* 日本語入力（IME）は Enter で確定するが、テーマの検索は Enter 以外の keyup でしか
+     走らないので、確定しても結果が出ない。入力が変わったら keyup を送って検索させる。
+     （テーマがHTMLを1行に圧縮するので、// のコメントは使わないこと） */
+  document.addEventListener('DOMContentLoaded', function () {
+    var input = document.getElementById('search-input');
+    if (!input) return;
+
+    var search = function () { input.dispatchEvent(new KeyboardEvent('keyup')); };
+    input.addEventListener('compositionend', search);
+    input.addEventListener('input', function (e) { if (!e.isComposing) search(); });
+  });
+</script>
