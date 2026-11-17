@@ -22,9 +22,18 @@ module Rakka
   #   シャード宛て（すぐ処理される）
   #   [:tick]              アイドルなアクターの掃除
   #   [:stats, reply_port]
+  #   [:load, reply_port]  リバランス用: 未処理数と、溜まっているアクターの一覧
+  #
+  #   アクターの移動（ActorSystem#migrate を参照）
+  #   [:expect, stream_id]                 これから引き継ぐ。届くまでこのアクター宛ては保留
+  #   [:release, stream_id, target_ractor] 手放す。未処理のメッセージを target に渡す
+  #   [:adopt, stream_id, backlog]         引き継ぐ。backlog → 保留分の順に処理を再開
   #   [:stop]              溜まっているメッセージを処理し終えてから止まる
   class Shard
     Entry = Struct.new(:behavior, :state, :version, :last_active)
+
+    # リバランスの判断材料として報告するアクター数の上限
+    LOAD_SAMPLE = 64
 
     # 自分宛てに送る目印。これを受け取るまでに届いていた分は振り分け済みと分かる
     DRAINED = :__rakka_drained__
@@ -89,6 +98,8 @@ module Rakka
       @mailboxes = {}
       @queued = 0
       @dropped = 0
+      # 引き継ぎ待ちのアクター: stream_id => 保留中のメッセージ
+      @parked = {}
       @stopping = false
 
       # stream_id => Entry。挿入順 = 最後に使われた順（先頭が最も古い）
@@ -105,7 +116,7 @@ module Rakka
           dispatch(Ractor.receive) # 仕事が無いので届くまで待つ
         else
           drain
-          run_next_actor
+          run_next_actor unless @mailboxes.empty? # drain中にアクターを手放して空になることがある
         end
       end
     ensure
@@ -118,9 +129,19 @@ module Rakka
     def dispatch(message)
       case message
       in [:command | :get_state, _, _, stream_id, *]
-        enqueue(stream_id, message)
+        accept(stream_id, message)
       in [:passivate, stream_id, _]
-        enqueue(stream_id, message)
+        accept(stream_id, message)
+      in [:expect, stream_id]
+        @actors.delete(stream_id)
+        @parked[stream_id] ||= []
+      in [:release, stream_id, target]
+        release(stream_id, target)
+      in [:adopt, stream_id, backlog]
+        adopt(stream_id, backlog)
+      in [:load, reply]
+        respond(reply, { queued: @queued,
+                         backlog: @mailboxes.first(LOAD_SAMPLE).map { |id, mailbox| [id, mailbox.size] } })
       in [:tick]
         passivate_idle
       in [:stats, reply]
@@ -129,6 +150,34 @@ module Rakka
       in [:stop]
         @stopping = true
       end
+    end
+
+    def accept(stream_id, message)
+      if (parked = @parked[stream_id])
+        parked << message
+      else
+        enqueue(stream_id, message)
+      end
+    end
+
+    # アクターを手放す。メモリ上の状態は捨て（移動先がイベントから復元する）、
+    # 未処理のメッセージは順序を保ったまま移動先に渡す
+    def release(stream_id, target)
+      backlog = @mailboxes.delete(stream_id) || []
+      @queued -= backlog.size
+      @actors.delete(stream_id)
+
+      target.send([:adopt, stream_id, backlog])
+    rescue Ractor::ClosedError
+      # 移動先が落ちていた。待っている呼び出しを起こす
+      backlog.each { |message| respond(message.last, [:shard_crashed]) }
+    end
+
+    def adopt(stream_id, backlog)
+      parked = @parked.delete(stream_id) || []
+      (backlog + parked).each { |message| enqueue(stream_id, message) }
+
+      @router.send([:adopted, stream_id, Ractor.current, backlog.filter_map(&:last)])
     end
 
     def enqueue(stream_id, message)
