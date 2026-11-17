@@ -79,10 +79,13 @@
       <ol class="tenet-list">
         {%- for tenet in t.tenets %}
         <li>
+          {%- if tenet.title %}
           <span class="kanji" lang="ja" aria-hidden="true">{{ tenet.kanji }}</span>
           <h3>{{ tenet.title }}</h3>
+          {%- else %}
+          <h3 class="kanji" lang="ja">{{ tenet.kanji }}</h3>
+          {%- endif %}
           <p>{{ tenet.body }}</p>
-          <a href="{{ tenet.link.href }}">{{ tenet.link.label }}</a>
         </li>
         {%- endfor %}
       </ol>
@@ -91,7 +94,6 @@
     <section class="code" aria-labelledby="code-title">
       <div class="code__text">
         <h2 id="code-title" class="section-title section-title--left"><span>{{ t.code_title }}</span></h2>
-        <p>{{ t.code_intro }}</p>
         <ul>
           {%- for point in t.code_points %}
           <li>{{ point }}</li>
@@ -122,7 +124,7 @@
       </div>
     </section>
 
-    <section class="name{% if t.name.vertical %} name--vertical{% endif %}" aria-labelledby="name-title">
+    <section class="name{% if t.name.vertical %} name--vertical{% endif %}" aria-label="Rakka">
       <div class="name__petals" aria-hidden="true">
         <svg style="--x:8%;--y:18%;--r:-30deg;--s:1"><use href="#petal"/></svg>
         <svg style="--x:22%;--y:72%;--r:50deg;--s:.7"><use href="#petal"/></svg>
@@ -130,10 +132,6 @@
         <svg style="--x:94%;--y:70%;--r:-140deg;--s:.6"><use href="#petal"/></svg>
       </div>
       <p class="name__poem">{% for line in t.name.poem %}<span>{{ line }}</span>{% endfor %}</p>
-      <div class="name__text">
-        <h2 id="name-title"><span class="rakkan" aria-hidden="true">落花</span>{{ t.name.title }}</h2>
-        <p>{{ t.name.body }}</p>
-      </div>
     </section>
   </main>
 
