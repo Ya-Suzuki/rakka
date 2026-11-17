@@ -3,12 +3,12 @@
 Gem::Specification.new do |spec|
   spec.name = "rakka-rails"
   spec.version = "0.1.0"
-  spec.authors = ["Your Name"]
-  spec.email = ["your@email.com"]
+  spec.authors = ["Ya-Suzuki"]
+  spec.email = ["Ya-Suzuki@users.noreply.github.com"]
 
   spec.summary = "Rails integration for Rakka"
   spec.description = "Rails integration for Rakka - Ractor-based Actor Event Sourcing. Provides generators, Railtie, and ActiveRecord configuration bridging."
-  spec.homepage = "https://github.com/yourusername/rakka"
+  spec.homepage = "https://github.com/Ya-Suzuki/rakka"
   spec.license = "MIT"
   spec.required_ruby_version = ">= 4.0.0"
 
