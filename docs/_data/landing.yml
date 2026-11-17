@@ -49,7 +49,13 @@ ja:
     - { title: サンプルアプリ, text: "同時入札とタイムトラベル", href: sample-app.html }
     - { title: よくある疑問, text: "Ractor を使う意味と Akka との違い", href: faq.html }
     - { title: 開発, text: "テストとデモ", href: development.html }
-  footer: Rakka = <b>Ra</b>ctor + Ak<b>ka</b>。名前は落花（らっか）にも掛けています。
+  name:
+    title: 名前のこと
+    poem: [散っても, また咲く]
+    vertical: true
+    # 日本語は >- で折り返すと文の間に空白が入るので、1行で書く
+    body: Rakka は Ractor と Akka を合わせた名前です。同じ読みの落花（らっか）は、散る花のこと。<br>アクターの状態は花びらのように散っても構いません。イベントという幹が残っていれば、同じ花がまた咲きます。
+  footer: Rakka = <b>Ra</b>ctor + Ak<b>ka</b>
   nav_label: サイト
 
 en:
@@ -104,5 +110,13 @@ en:
     - { title: Sample app, text: "Concurrent bidding and time travel in an auction app", href: sample-app.html }
     - { title: FAQ, text: "Why Ractors at all, and how this compares to Akka and Erlang", href: faq.html }
     - { title: Development, text: "Tests and demo scripts", href: development.html }
-  footer: Rakka = <b>Ra</b>ctor + Ak<b>ka</b>, and 落花, &ldquo;falling petals&rdquo;. Light, and blooming again after it falls.
+  name:
+    title: About the name
+    poem: [Petals fall., The tree remains.]
+    vertical: false
+    body: >-
+      Rakka joins Ractor and Akka. Read the Japanese way, 落花 (rakka) means falling petals.
+      An actor's state may fall away like a petal. As long as the events remain, like the trunk of a tree,
+      the same flower blooms again.
+  footer: Rakka = <b>Ra</b>ctor + Ak<b>ka</b>
   nav_label: Site
