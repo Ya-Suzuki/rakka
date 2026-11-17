@@ -301,3 +301,10 @@ html[lang="en"] {
 .main-header {
   align-items: center;
 }
+
+// Japanese: wrap at phrase boundaries where supported (no effect elsewhere)
+html[lang="ja"] .main-content {
+  h1, h2, h3, p, li, td {
+    word-break: auto-phrase;
+  }
+}

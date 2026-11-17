@@ -3,7 +3,7 @@ title: ホーム
 nav_order: 1
 permalink: /
 layout: landing
-description: 状態は散っても、イベントから何度でも咲く。Ruby 4.0 の Ractor で動く、アクター型のイベントソーシングライブラリ。
+description: 状態は散っても、また咲く。Ruby 4.0 の Ractor で動く、アクター型のイベントソーシングライブラリ。
 ---
 
 ```ruby
@@ -34,5 +34,5 @@ end
 
 account = BankAccount.new("account-123")
 account.deposit(1000)
-account.balance # => 1000（再起動しても、イベントから同じ姿に）
+account.balance # => 1000（再起動しても、イベントから元どおり）
 ```

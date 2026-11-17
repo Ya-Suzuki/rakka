@@ -461,3 +461,20 @@ html[lang="en"] .hero h1 { letter-spacing: 0.005em; line-height: 1.18; }
 html[lang="en"] .hero__title rt { letter-spacing: 0.35em; }
 html[lang="en"] .section-title { letter-spacing: 0.03em; }
 html[lang="en"] .tenet-list h3 { letter-spacing: 0.01em; }
+
+/* 日本語版: 漢字の多い見出しは、縦書きの題字と張り合わないよう軽く組む */
+html[lang="ja"] .hero h1 {
+  font-weight: 700;
+  font-size: clamp(2.3rem, 5vw, 3.9rem);
+  line-height: 1.35;
+  letter-spacing: 0.02em;
+}
+html[lang="ja"] .lead { max-width: 36em; }
+html[lang="ja"] .section-title { letter-spacing: 0.06em; }
+html[lang="ja"] .tenet-list h3 { letter-spacing: 0.02em; }
+
+/* 日本語は文節の途中で折り返さない（対応していないブラウザでは従来どおり） */
+html[lang="ja"] h1, html[lang="ja"] h2, html[lang="ja"] h3,
+html[lang="ja"] .lead, html[lang="ja"] p, html[lang="ja"] li, html[lang="ja"] .path-list span {
+  word-break: auto-phrase;
+}
