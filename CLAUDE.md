@@ -82,8 +82,13 @@ EventBus (Main Thread) → subscribers
 
 ### リバランス（アクターの移動）
 
-- `ActorSystem` は `rebalance_interval` 秒ごとに各シャードの未処理数を調べ、最大と最小の差が `rebalance_threshold` 以上なら、溜まっているアクターを空いているシャードへ `migrate` する
-- 移すのは「移すと差が縮まる」アクターだけ。1つのアクターに集中している場合は動かさない（動かしても偏りが移るだけ）
+- 調整用の設定は無い（`rebalance: false` で無効にできるだけ）。各シャードが実測する `service_time`（メッセージ1件の処理時間）と `activation_time`（アクター1つの復元時間）の移動平均から自動で決める
+- 溜まり具合は件数ではなく「捌き切るまでの見込み時間」（未処理数 × `service_time`）で比べる
+- 移す条件（`ActorSystem#rebalance`）:
+  1. 最大と最小の差（gap）が移動コスト（`HANDOFF_OVERHEAD` + `activation_time`）より大きい
+  2. 移動先は、移動が済む頃には手が空いている（ワークスティーリングと同じ。全シャードが忙しいときに移すと、手間のぶん全体が遅くなる）
+  3. そのアクターの分（time）を移しても `gap - time > cost`、つまり今のシャードで待つより早く終わる。1つのアクターに集中している場合は gap ≒ time なので動かない
+- 調べる間隔は `REBALANCE_INTERVAL`（10ms〜0.5s）の範囲で、偏りがある間は最短、無ければ倍々で延ばす
 - 移動済みアクターは `@routes`（stream_id => シャード番号）で管理。`MAX_ROUTES` を超えたら古いものからホームに戻す
 - `migrate` の手順（順序を保つための引き継ぎ）:
   1. 移動先に `[:expect]` → 引き継ぎが届くまで、そのアクター宛てを保留（`@parked`）
