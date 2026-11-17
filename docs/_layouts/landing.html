@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Yuji+Syuku&text=%E8%90%BD%E8%8A%B1&display=swap">
   <link rel="icon" href="{{ '/assets/images/rakkan.svg' | relative_url }}" type="image/svg+xml">
   <link rel="stylesheet" href="{{ '/assets/css/landing.css' | relative_url }}">
+  <script src="{{ '/assets/js/petals.js' | relative_url }}" defer></script>
   {%- include lang_twin.html %}
   <link rel="alternate" hreflang="{{ page.lang }}" href="{{ page.url | absolute_url }}">
   <link rel="alternate" hreflang="{{ twin_lang }}" href="{{ twin_url | absolute_url }}">
@@ -126,7 +127,7 @@
   </main>
 
   <footer class="footer">
-    <p class="footer__poem{% if t.name.vertical %} footer__poem--vertical{% endif %}">{% for line in t.name.poem %}<span>{{ line }}</span>{% endfor %}</p>
+    <p class="footer__poem{% if t.name.vertical %} footer__poem--vertical{% endif %}" data-replay-label="{{ t.name.replay_label }}">{% for line in t.name.poem %}<span>{{ line }}</span>{% endfor %}</p>
     <p>{{ t.footer }}<br>MIT License &middot; <a href="https://github.com/Ya-Suzuki/rakka">GitHub</a> &middot; <a href="{{ t.switch.href | relative_url }}" hreflang="{{ t.switch.lang }}" lang="{{ t.switch.lang }}">{{ t.switch.label }}</a></p>
   </footer>
 </body>

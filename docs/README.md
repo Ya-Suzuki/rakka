@@ -37,8 +37,10 @@ GitHub Pages で公開するドキュメントのソース（Jekyll + [Just the 
 | `_sass/color_schemes/rakka.scss` | テーマの変数への割り当て（`_config.yml` の `color_scheme: rakka`） |
 | `_sass/custom/custom.scss` | ドキュメントページの見た目（明朝の見出し、墨のコードブロック、注記など） |
 | `_includes/title.html` | サイドバーの題字（落款 + Rakka） |
+| `assets/js/petals.js` | トップページで散り続けて積もる花びら。フッターの一言（散っても／また咲く）を押すと、巻き戻してから同じように散り直す |
 
 - `.scss` には ASCII 以外の文字を書かない。Sass はビルド環境の既定の文字コードで読むので、UTF-8 でない環境では日本語のコメントでビルドが止まる。注記の見出し（`_config.yml` の `callouts`）も CSS のエスケープで書いている
+- 花びらの動きは、生まれた時刻と乱数から決まる値（イベント）と経過時間だけで決まる純粋な関数（`place`）。積もる位置も散った順番だけで決まるので、巻き戻して再生すると同じ場所に積もり直す。押せることは見せない（遊びとして、気づいた人だけのもの）。動きを減らす設定のときはキャンバスを使わず、ヒーローの静止した花びらになる
 - トップページの色を変えるときは、`landing.css` の `:root` と `setup.scss` の両方を揃える
 
 手元で確かめるときは、Ruby 3.3 で `github-pages` gem を使う（GitHub Pages と同じ Jekyll 3.10）。テーマは `remote_theme` で取りに行くので、取れない環境では `just-the-docs` gem を入れて `theme: just-the-docs` / `remote_theme: false` の設定を重ねてビルドする。
