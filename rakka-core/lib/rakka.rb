@@ -58,6 +58,16 @@ module Rakka
       @mailbox_capacity || ENV["RAKKA_MAILBOX_CAPACITY"]&.to_i
     end
 
+    # 何イベントごとにアクターの状態のスナップショットを保存するか（デフォルト100）。
+    # false で保存しない。クラスごとに PersistentActor.snapshot_every で上書きできる
+    attr_writer :snapshot_every
+
+    def snapshot_every
+      return nil if @snapshot_every == false
+
+      @snapshot_every || ENV.fetch("RAKKA_SNAPSHOT_EVERY", 100).to_i
+    end
+
     # 負荷の偏りを調べる間隔（秒）。false でリバランスしない
     attr_writer :rebalance_interval
 
@@ -134,6 +144,7 @@ module Rakka
           max_actors_per_shard: configuration.max_actors_per_shard,
           throughput: configuration.throughput,
           mailbox_capacity: configuration.mailbox_capacity,
+          snapshot_every: configuration.snapshot_every,
           rebalance_interval: configuration.rebalance_interval,
           rebalance_threshold: configuration.rebalance_threshold
         )

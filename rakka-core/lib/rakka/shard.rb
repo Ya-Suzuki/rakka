@@ -30,7 +30,8 @@ module Rakka
   #   [:adopt, stream_id, backlog]         引き継ぐ。backlog → 保留分の順に処理を再開
   #   [:stop]              溜まっているメッセージを処理し終えてから止まる
   class Shard
-    Entry = Struct.new(:behavior, :state, :version, :last_active)
+    # snapshot_at: 保存済みの最新スナップショットのversion（無ければ0）
+    Entry = Struct.new(:behavior, :state, :version, :last_active, :snapshot_at)
 
     # リバランスの判断材料として報告するアクター数の上限
     LOAD_SAMPLE = 64
@@ -73,7 +74,7 @@ module Rakka
       alias passivate ask
     end
 
-    # options: passivate_after, max_actors, throughput, mailbox_capacity
+    # options: passivate_after, max_actors, throughput, mailbox_capacity, snapshot_every
     def self.spawn(index, connector, publisher_port, router_port, **options)
       Ractor.new(index, connector, publisher_port, router_port, Ractor.make_shareable(options),
                  name: "rakka-shard-#{index}") do |i, conn, publisher, router, opts|
@@ -82,7 +83,7 @@ module Rakka
     end
 
     def initialize(index, journal, publisher_port, router_port, passivate_after:, max_actors:,
-                   throughput:, mailbox_capacity: nil)
+                   throughput:, mailbox_capacity: nil, snapshot_every: nil)
       @index = index
       @journal = journal
       @publisher = publisher_port
@@ -92,6 +93,7 @@ module Rakka
       @max_actors = max_actors
       @throughput = throughput
       @mailbox_capacity = mailbox_capacity
+      @snapshot_every = snapshot_every
 
       # stream_id => 未処理メッセージ。空になったら消すので、ここにあるアクター =
       # 実行待ちのアクター。挿入順がそのまま実行順（ランキュー）になる
@@ -281,17 +283,42 @@ module Rakka
         @publisher.send([:publish, event, { stream_id: stream_id, actor_id: id,
                                             version: version - events.size + i + 1 }])
       end
+
+      save_snapshot(entry, stream_id)
     end
 
-    # メモリ上のアクターを返す。無ければイベントを再生して作る（再活性化）
+    # 前回のスナップショットから interval 件以上イベントが増えていたら、今の状態を保存する
+    def save_snapshot(entry, stream_id)
+      actor_class = entry.behavior.class
+      interval = actor_class.snapshot_interval(@snapshot_every)
+      return unless interval && entry.version - entry.snapshot_at >= interval
+
+      @journal.save_snapshot(stream_id, actor_class.snapshot_schema_version, entry.version, entry.state)
+      entry.snapshot_at = entry.version
+    rescue StandardError => e
+      # スナップショットは復元を速くするためだけのもの。保存に失敗しても処理は続ける
+      warn "[Rakka] #{stream_id} snapshot was not saved: #{e.class}: #{e.message}"
+    end
+
+    # 使えるスナップショットがあれば [state, version] を返す
+    def load_snapshot(actor_class, stream_id)
+      return unless actor_class.snapshot_interval(@snapshot_every)
+
+      schema, version, state = @journal.load_snapshot(stream_id)
+      [state, version] if schema == actor_class.snapshot_schema_version
+    end
+
+    # メモリ上のアクターを返す。無ければスナップショット + それ以降のイベントから
+    # 作る（再活性化）
     def activate(actor_class, id, stream_id)
       entry = @actors.delete(stream_id)
 
       unless entry
         behavior = actor_class.behavior(id)
-        events = @journal.read(stream_id)
-        state = events.reduce(behavior.initial_state) { |s, event| behavior.apply_event(event, s) }
-        entry = Entry.new(behavior, state, events.size, nil)
+        state, snapshot_at = load_snapshot(actor_class, stream_id) || [behavior.initial_state, 0]
+        events = @journal.read(stream_id, snapshot_at)
+        state = events.reduce(state) { |s, event| behavior.apply_event(event, s) }
+        entry = Entry.new(behavior, state, snapshot_at + events.size, nil, snapshot_at)
 
         @actors.shift while @actors.size >= @max_actors
       end

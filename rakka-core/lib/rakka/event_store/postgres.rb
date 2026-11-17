@@ -23,6 +23,14 @@ module Rakka
 
         CREATE INDEX IF NOT EXISTS idx_rakka_events_stream_id
           ON rakka_events(stream_id);
+
+        CREATE TABLE IF NOT EXISTS rakka_snapshots (
+          stream_id VARCHAR PRIMARY KEY,
+          schema INT NOT NULL,
+          version INT NOT NULL,
+          state BYTEA NOT NULL,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
       SQL
 
       Connector = Data.define(:connection_string, :options) do
@@ -78,6 +86,31 @@ module Rakka
             SELECT COALESCE(MAX(position) + 1, 0) AS size FROM rakka_events WHERE stream_id = $1
           SQL
           result[0]["size"].to_i
+        end
+
+        # stateはMarshalで保存する（Hashのキーの型やData/Timeなどをそのまま戻すため）。
+        # 別プロセスが先に新しいものを保存していたら上書きしない
+        def save_snapshot(stream_id, schema, version, state)
+          exec(<<~SQL, [stream_id, schema, version, { value: Marshal.dump(state), format: 1 }])
+            INSERT INTO rakka_snapshots (stream_id, schema, version, state)
+            VALUES ($1, $2::int, $3::int, $4::bytea)
+            ON CONFLICT (stream_id) DO UPDATE
+              SET schema = EXCLUDED.schema, version = EXCLUDED.version,
+                  state = EXCLUDED.state, created_at = NOW()
+              WHERE rakka_snapshots.version <= EXCLUDED.version
+          SQL
+          :ok
+        end
+
+        def load_snapshot(stream_id)
+          row = exec(<<~SQL, [stream_id]).first
+            SELECT schema, version, state FROM rakka_snapshots WHERE stream_id = $1
+          SQL
+          return unless row
+
+          [row["schema"].to_i, row["version"].to_i, Marshal.load(PG::Connection.unescape_bytea(row["state"]))]
+        rescue ArgumentError, TypeError, NameError
+          nil # 読めないスナップショット（クラスが消えた等）は無いものとして扱う
         end
 
         def close
