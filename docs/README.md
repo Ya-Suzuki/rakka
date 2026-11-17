@@ -37,7 +37,7 @@ GitHub Pages で公開するドキュメントのソース（Jekyll + [Just the 
 | `_sass/color_schemes/rakka.scss` | テーマの変数への割り当て（`_config.yml` の `color_scheme: rakka`） |
 | `_sass/custom/custom.scss` | ドキュメントページの見た目（明朝の見出し、墨のコードブロック、注記など） |
 | `_includes/title.html` | サイドバーの題字（落款 + Rakka） |
-| `_petals/` → `assets/js/petals.js` | トップページで舞って積もる花びら（three.js）。ソースは `_petals/petals.js`、書き出しは `cd _petals && npm install && npm run build`（`_petals/README.md`）。ページの底（フッターの下）に積もり、フッターの一言（散っても／また咲く）を押すと、巻き戻し → スナップショットの山を復元 → 以降の花びらだけを元の速さで再生する |
+| `_petals/` → `assets/js/petals.js` | トップページで舞って積もる花びら（three.js）。ソースは `_petals/petals.js`、書き出しは `cd _petals && npm install && npm run build`（`_petals/README.md`）。ページの底（フッターの下）に積もり、フッターの一言（散っても／また咲く）を押すと、スナップショットまでの山は残したまま、それ以降の花びらだけを巻き戻して元の速さで再生する |
 
 - `.scss` には ASCII 以外の文字を書かない。Sass はビルド環境の既定の文字コードで読むので、UTF-8 でない環境では日本語のコメントでビルドが止まる。注記の見出し（`_config.yml` の `callouts`）も CSS のエスケープで書いている
 - 花びらの動きは、生まれた時刻と乱数から決まる値（イベント）と経過時間だけで決まる純粋な関数（`place`）。積もる位置も散った順番だけで決まるので、巻き戻して再生すると同じ場所に積もり直す。押せることは見せない（遊びとして、気づいた人だけのもの）。動きを減らす設定のときはキャンバスを使わず、ヒーローの静止した花びらになる
