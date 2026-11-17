@@ -19,19 +19,23 @@
 <body>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
     <defs>
-      <linearGradient id="petal-shade" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#d2404c"/>
-        <stop offset="1" stop-color="#8f1720"/>
-      </linearGradient>
-      <linearGradient id="petal-light" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#f6c2bd"/>
-        <stop offset="1" stop-color="#e3646d"/>
-      </linearGradient>
-      <!-- 桜の花びら。左右で色を変え、Ruby の宝石のような面をつける -->
+      <clipPath id="petal-outline"><path d="M20 52 5 17C4 9 7 2 12 1c3-.5 6 1.5 8 6 2-4.5 5-6.5 8-6 5 1 8 8 7 16Z"/></clipPath>
+      <!-- 桜の花びらを、宝石のカットのように切り分ける（assets/js/petals.js と同じ形） -->
       <symbol id="petal" viewBox="0 0 40 52">
-        <path fill="url(#petal-shade)" d="M20 52C6 40 0 26 4 12 7 4 14 1 18 6l2 4Z"/>
-        <path fill="url(#petal-light)" d="M20 10l2-4c4-5 11-2 14 6 4 14-2 28-16 40Z"/>
-        <path fill="#fff" opacity=".28" d="M20 10l-7 11 7 15Z"/>
+        <g clip-path="url(#petal-outline)" stroke="rgba(255,255,255,.18)" stroke-width=".5">
+        <polygon fill="#e9868d" points="5,0 12,1 5,17"/>
+        <polygon fill="#d9535c" points="12,1 12.5,17 5,17"/>
+        <polygon fill="#f2b3b5" points="12,1 20,7 12.5,17"/>
+        <polygon fill="#e46a73" points="20,7 20,17 12.5,17"/>
+        <polygon fill="#c63a44" points="20,7 27.5,17 20,17"/>
+        <polygon fill="#ee9aa0" points="20,7 28,1 27.5,17"/>
+        <polygon fill="#d0444e" points="28,1 35,17 27.5,17"/>
+        <polygon fill="#f4c0c1" points="28,1 35,0 35,17"/>
+        <polygon fill="#9e1b25" points="5,17 12.5,17 20,52"/>
+        <polygon fill="#c23040" points="12.5,17 20,17 20,52"/>
+        <polygon fill="#a81f2a" points="20,17 27.5,17 20,52"/>
+        <polygon fill="#86131c" points="27.5,17 35,17 20,52"/>
+        </g>
       </symbol>
     </defs>
   </svg>

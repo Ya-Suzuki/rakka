@@ -21,10 +21,52 @@
   document.body.insertBefore(canvas, document.body.firstChild);
   document.documentElement.classList.add('petal-canvas-on');
 
-  // 桜の花びら（左右で色を変えて、Ruby の宝石のような面をつける）。40x52 の座標
-  var LEFT = new Path2D('M20 52C6 40 0 26 4 12 7 4 14 1 18 6l2 4Z');
-  var RIGHT = new Path2D('M20 10l2-4c4-5 11-2 14 6 4 14-2 28-16 40Z');
-  var FACET = new Path2D('M20 10l-7 11 7 15Z');
+  // 桜の花びらの輪郭を、宝石のカットのように切り分ける（40x52 の座標）。
+  // 上の明るい面（クラウン）と、先端へ集まる深い赤の面（パビリオン）。
+  // _layouts/landing.html の SVG（#petal）と同じ形
+  var OUTLINE = new Path2D('M20 52 5 17C4 9 7 2 12 1c3-.5 6 1.5 8 6 2-4.5 5-6.5 8-6 5 1 8 8 7 16Z');
+  var FACETS = [
+    [[5, 0, 12, 1, 5, 17], '#e9868d'],
+    [[12, 1, 12.5, 17, 5, 17], '#d9535c'],
+    [[12, 1, 20, 7, 12.5, 17], '#f2b3b5'],
+    [[20, 7, 20, 17, 12.5, 17], '#e46a73'],
+    [[20, 7, 27.5, 17, 20, 17], '#c63a44'],
+    [[20, 7, 28, 1, 27.5, 17], '#ee9aa0'],
+    [[28, 1, 35, 17, 27.5, 17], '#d0444e'],
+    [[28, 1, 35, 0, 35, 17], '#f4c0c1'],
+    [[5, 17, 12.5, 17, 20, 52], '#9e1b25'],
+    [[12.5, 17, 20, 17, 20, 52], '#c23040'],
+    [[20, 17, 27.5, 17, 20, 52], '#a81f2a'],
+    [[27.5, 17, 35, 17, 20, 52], '#86131c']
+  ];
+
+  // 表と裏の絵を先に作っておき、毎フレームはそれを貼るだけにする
+  function sprite(back) {
+    var k = 4, c = document.createElement('canvas');
+    c.width = 40 * k;
+    c.height = 52 * k;
+    var g = c.getContext('2d');
+    g.scale(k, k);
+    g.clip(OUTLINE);
+    FACETS.forEach(function (f) {
+      var pts = f[0];
+      g.beginPath();
+      g.moveTo(pts[0], pts[1]);
+      for (var i = 2; i < pts.length; i += 2) g.lineTo(pts[i], pts[i + 1]);
+      g.closePath();
+      g.fillStyle = f[1];
+      g.fill();
+      g.strokeStyle = 'rgba(255, 255, 255, 0.18)';
+      g.lineWidth = 0.5;
+      g.stroke();
+    });
+    if (back) {
+      g.fillStyle = 'rgba(70, 0, 12, 0.3)';
+      g.fillRect(0, 0, 40, 52);
+    }
+    return c;
+  }
+  var FRONT = sprite(false), BACK = sprite(true);
 
   var BINS = 72;          // 積もる位置の区切り（画面幅によらず一定。幅を変えても同じ山になる）
   var LAYER = 3.2;        // 1枚積もるごとに山が高くなる量（px）
@@ -121,18 +163,13 @@
 
   function draw(p, s) {
     if (!s.visible || s.y > H + 60 || s.y < -80) return;
-    var k = 0.62 * p.scale;
-    ctx.setTransform(dpr * k * Math.max(0.08, Math.abs(s.flip)), 0, 0, dpr * k, s.x * dpr, s.y * dpr);
+    var k = 0.74 * p.scale;
+    // 裏返るときは左右を反転して、裏の絵を貼る
+    var sx = (s.flip < 0 ? -1 : 1) * Math.max(0.08, Math.abs(s.flip));
+    ctx.setTransform(dpr * k * sx, 0, 0, dpr * k, s.x * dpr, s.y * dpr);
     ctx.rotate(s.rot);
-    ctx.translate(-20, -26);
-    ctx.globalAlpha = p.piled && s.settled ? 0.8 : 0.95;
-    ctx.fillStyle = s.flip >= 0 ? '#b42833' : '#e9868d';
-    ctx.fill(LEFT);
-    ctx.fillStyle = s.flip >= 0 ? '#ee9aa0' : '#c23a45';
-    ctx.fill(RIGHT);
-    ctx.globalAlpha = 0.25;
-    ctx.fillStyle = '#fff';
-    ctx.fill(FACET);
+    ctx.globalAlpha = p.piled && s.settled ? 0.82 : 0.96;
+    ctx.drawImage(s.flip < 0 ? BACK : FRONT, -20, -26, 40, 52);
   }
 
   function frame() {
@@ -251,8 +288,8 @@
   window.__rakkaPetals = {
     advance: function (seconds) { for (var s = 0; s < seconds; s += 0.05) { clock += 0.05; frame(); } },
     state: function () { return { mode: mode, count: petals.length, piled: countPiled(),
-      // 山の位置はページ上の座標で返す（スクロール位置によらない）
-      rests: petals.filter(function (p) { return p.piled; }).map(function (p) { var s = place(p, p.dur); return [Math.round(s.x), Math.round(s.y + scrollY)]; }) }; },
+      // 積もる位置（ページ上の座標。スクロール位置によらない）
+      rests: petals.filter(function (p) { return p.piled; }).map(function (p) { return [Math.round((p.x + p.drift) * W), Math.round(docH - 10 - p.lift)]; }) }; },
     rewind: rewind
   };
 })();
