@@ -320,6 +320,14 @@ ruby examples/postgres_demo.rb
 
 ### Railsで使う場合
 
+```bash
+rails generate rakka:install          # マイグレーション（events / snapshots）と config/initializers/rakka.rb
+rails db:migrate
+rails generate rakka:aggregate Order  # app/aggregates/order.rb
+```
+
+`config/initializers/rakka.rb` の `config.rakka` に書いた設定（`shard_count` / `passivate_after` / `max_actors_per_shard` / `throughput` / `mailbox_capacity` / `snapshot_every` / `rebalance`）がRakka本体に渡る。接続先は `database.yml` から取る。既存のアプリにスナップショット用のテーブルだけ足す場合は `rails rakka:create_schema`（無いテーブルだけ作る）。
+
 - リバランスが働くのはプロセス内のシャード間だけ（プロセスをまたいだ移動はしない）
 - シャードRactorはプロセスごとに持つ。Pumaのクラスタモードでは各ワーカーが独立したActorSystemになる
 - ワーカーをまたいだ同時書き込みは楽観ロックで検出・再試行されるので整合性は保たれる（メモリ上のアクターは「単一ライターの保証」ではなく「状態キャッシュ + プロセス内の直列化」）

@@ -28,6 +28,13 @@ bundle exec rspec spec/rakka/event_store/postgres_spec.rb
 ruby examples/postgres_demo.rb
 ```
 
+```bash
+# rakka-rails開発（最小のRailsアプリを起動してRailtieとジェネレータを検証する）
+cd rakka-rails
+bundle install
+bundle exec rspec
+```
+
 ## アーキテクチャ
 
 **アクター ≠ Ractor**。Ractorはシャード数（≒コア数）だけ作り、アクターはシャードRactor内のHashエントリ（behavior + state + version）として同居する（Akkaのディスパッチャ方式）。アクター数を増やしてもRactorは増えない。アクターの置き場所は `crc32(stream_id)` で決まるホームが基本で、負荷が偏ると空いているシャードへ移される。
@@ -132,6 +139,12 @@ result = reply_port.receive  # ブロック
 # Portなしの非同期通信
 ractor.send([:command, actor_class, id, stream_id, cmd, nil])
 ```
+
+### rakka-rails
+
+- `config.rakka`（`config/initializers/rakka.rb`）の内容を `Rakka::Rails.apply` が `Rakka.configure` に渡す。渡す項目は `Rakka::Rails::SETTINGS`。本体に設定項目を足したらここにも足す
+- 反映は `after_initialize` で行う（`config/initializers` はRailtieのinitializerより後に読まれるため）
+- ジェネレータは `lib/rakka/rails/generators/` にあり、Railsの探索パス外なので Railtie の `generators` ブロックで読み込む
 
 ## Ractor制約
 

@@ -2,8 +2,14 @@
 
 module Rakka
   module Rails
+    # config.rakka のうち、そのまま Rakka.configure に渡す項目
+    SETTINGS = %i[
+      shard_count passivate_after max_actors_per_shard throughput
+      mailbox_capacity snapshot_every rebalance
+    ].freeze
+
     class Configuration
-      attr_accessor :shard_count, :passivate_after, :max_actors_per_shard, :database_config_name
+      attr_accessor :database_config_name
 
       def initialize
         @database_config_name = :primary
@@ -41,6 +47,21 @@ module Rakka
 
       def configure
         yield(configuration)
+      end
+
+      # config.rakka（Hash / OrderedOptions）の内容を Rakka 本体の設定に反映する。
+      # 指定の無い項目は Rakka 本体のデフォルトのまま。false は「無効」として渡す
+      def apply(settings)
+        configuration.database_config_name = settings.fetch(:database_config_name, :primary)
+
+        Rakka.configure do |config|
+          config.event_store = configuration.build_event_store
+
+          SETTINGS.each do |name|
+            value = settings[name]
+            config.public_send("#{name}=", value) unless value.nil?
+          end
+        end
       end
     end
   end
