@@ -34,6 +34,9 @@ module Rakka
     #   save_snapshot(stream_id, schema, version, state)
     #     version時点のstateを保存する（ストリームごとに最新の1つだけ持つ）
     #   load_snapshot(stream_id) => [schema, version, state] | nil
+    #   recover(stream_id, schema) => [snapshot_version, state, events]
+    #     アクターの復元に必要なものを1回で返す。schema の合うスナップショットがあれば
+    #     それと以降のイベント、無ければ（または schema が nil なら）[0, nil, 全イベント]
     #   close
     #
     # version はストリーム内のイベント数（= 次に書く position）。

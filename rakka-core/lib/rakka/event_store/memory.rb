@@ -43,6 +43,10 @@ module Rakka
           call(:load_snapshot, stream_id)
         end
 
+        def recover(stream_id, schema)
+          call(:recover, stream_id, schema)
+        end
+
         def close; end
 
         private
@@ -90,6 +94,15 @@ module Rakka
 
             in [:load_snapshot, stream_id, reply]
               reply.send(snapshots[stream_id])
+
+            in [:recover, stream_id, schema, reply]
+              stream = streams.fetch(stream_id, [])
+              snapshot_schema, version, state = snapshots[stream_id]
+              if schema && snapshot_schema == schema
+                reply.send([version, state, stream.drop(version)])
+              else
+                reply.send([0, nil, stream])
+              end
 
             in [:stop]
               break

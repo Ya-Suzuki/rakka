@@ -109,7 +109,7 @@ EventBus (Main Thread) → subscribers
 ### スナップショット
 
 - `snapshot_every`（デフォルト100）イベントごとに、シャードが `journal.save_snapshot(stream_id, schema, version, state)` で状態を保存する。ストリームごとに最新の1つだけ持つ
-- 復元は「スナップショットの state」から始め、`journal.read(stream_id, snapshot_version)` で以降のイベントだけ再生する
+- 復元は `journal.recover(stream_id, schema)` の1回で「スナップショット + 以降のイベント」を受け取り、スナップショットの state から以降のイベントだけ再生する
 - クラスごとの指定: `snapshot_every 500` / `snapshot_every nil`（無効）。`snapshot_schema 2` で番号を上げると、古い番号のスナップショットは無視される（state の形や `apply_event` の意味を変えたときに上げる）
 - スナップショットは消しても壊れても困らないキャッシュ。保存の失敗は警告だけ、読めないものは無いものとして扱う
 - PostgreSQLでは `rakka_snapshots` テーブルに Marshal で保存する（JSONだとキーの型やDataが戻らないため）
