@@ -2,9 +2,12 @@
  * 落花: Ruby の宝石のような花びらが舞いながら散り、ページの底（フッターの下）に積もる。
  * 途中を読んでいる間は画面の下を通り抜けて見えなくなり、最後までスクロールすると山が見える。
  *
- * フッターの一言を押すと、Rakka が集約を復元するのと同じ考え方で山を作り直す:
- *   - スナップショット（10枚ごとの区切り）までの山は、そのまま残る（復元しても同じ山なので動かさない）
- *   - 区切りの後に散った花びらだけが、山から舞い上がって巻き戻り、元の間隔・元の速さで散り直す
+ * フッターの一言を押すと、イベントを最初から再生して山を作り直す:
+ *   1. 巻き戻し: 全部の花びらが、新しいものから順に舞い上がる（状態を捨てる）
+ *   2. 早送りで再生: 最初の一枚から、全員の時間を同じ倍率で速めて再生する。順番も間隔も
+ *      元のままなので一斉には降らず、山は散った順に積み上がる。速さは等速から上限
+ *      （MAX_SPEED 倍。一枚が落ちる様子が見える速さ）までなめらかに上げ、また等速まで下げる
+ *   3. 今に追いつく: 最後の CATCH_UP 秒ぶんは等速で、直近の花びらは元どおりに舞って着地する
  *
  * 花びらの動きは「生まれた時刻と乱数から決まる値（イベント）」と「経過時間」だけで
  * 決まる純粋な関数（place）なので、巻き戻しも再生も、時間を動かすだけでできる。
@@ -20,9 +23,11 @@ const BINS = 72;          // 積もる位置の区切り（画面幅によらず
 const LAYER = 3.4;        // 1枚積もるごとに山が高くなる量（px）
 const HEAP_MAX = 40;      // 山の高さの上限（px）
 const PILE_MAX = 180;     // 積もらせる枚数の上限。超えたら画面の外へ落ちて消える
-const LIFT = 1.4;         // 一枚が舞い上がるのにかける秒数。最後に散ったものから順に、ずらして上がる
-const LIFT_GAP = 0.25;    // 次の一枚が舞い上がり始めるまでの間隔
-const SNAPSHOT_EVERY = 10; // スナップショットを取る間隔（散った枚数）
+const REWIND = 2.4;       // 巻き戻しにかける秒数（全体）
+const LIFT = 1.2;         // 一枚が舞い上がるのにかける秒数。最後に散ったものから順に、ずらして上がる
+const MAX_SPEED = 50;     // 早送りの上限（倍）。これより速いと、落ちる途中が見えず下端に突然現れて見える
+const RAMP = 1.2;         // 等速と上限の間を加速・減速するのにかける秒数
+const CATCH_UP = 10;      // 最後に等速で再生する長さ（元の時間で秒）
 const SIZE = 22;          // 花びらの大きさ（幅 1.24 に掛ける px）
 const CAPACITY = 256;
 
@@ -81,9 +86,8 @@ function start() {
   let nextSpawn = 0;
   let mode = 'live';       // live / rewind / replay
   let modeStart = 0;
-  let snapshotAt = 0;      // スナップショットに含まれる花びらの数（散った順の先頭から）
-  let replayFrom = 0;      // 再生の基準（スナップショット後の最初の花びらが散った時刻）
-  let rewindLength = 0;
+  let replayFrom = 0;      // 再生の基準（最初の花びらが散った時刻）
+  let replayLength = 0;    // 再生する元の時間の長さ（最初の花びらから、最後の花びらが積もるまで）
 
   const countPiled = () => petals.reduce((n, p) => n + (p.piled ? 1 : 0), 0);
 
@@ -142,14 +146,32 @@ function start() {
     };
   }
 
+  // 再生の時計: 実際の経過秒 s → 元の時間 τ。全員に同じ τ を使うので、順番も間隔も崩れない。
+  // 速さは 1 → V（加速 RAMP 秒）→ V のまま → 1（減速 RAMP 秒）→ 最後の CATCH_UP 秒ぶんは等速。
+  // 加減速は smoothstep で、その積分 u³ - u⁴/2 を使って τ を出す
+  function replayTime(s) {
+    const F = Math.max(0, replayLength - CATCH_UP); // 早送りで進める元の時間
+    const V = Math.min(MAX_SPEED, Math.max(1, F / RAMP - 1));
+    if (F === 0 || V === 1) return s;
+    const plateau = Math.max(0, (F - RAMP * (1 + V)) / V);
+    const ramped = (u) => u * u * u - u * u * u * u / 2;
+    const rampUp = RAMP * (1 + V) / 2;
+    if (s < RAMP) return s + (V - 1) * RAMP * ramped(s / RAMP);
+    if (s < RAMP + plateau) return rampUp + V * (s - RAMP);
+    if (s < 2 * RAMP + plateau) {
+      const w = (s - RAMP - plateau) / RAMP;
+      return rampUp + V * plateau + V * w * RAMP - (V - 1) * RAMP * ramped(w);
+    }
+    return F + (s - 2 * RAMP - plateau);
+  }
+
   function elapsed(p, i) {
     if (mode === 'live') return clock - p.born;
-    if (i < snapshotAt) return p.dur;                 // スナップショットの山: 動かさない
     if (mode === 'rewind') {
       const q = ease(Math.max(0, Math.min(1, (clock - modeStart - p.rewindDelay) / LIFT)));
       return p.rewindFrom * (1 - q);
     }
-    return clock - modeStart - (p.born - replayFrom); // 元の間隔・元の速さで再生
+    return replayTime(clock - modeStart) - (p.born - replayFrom);
   }
 
   const dummy = new Object3D();
@@ -182,7 +204,7 @@ function start() {
       renderer.render(scene, camera);
     }
 
-    if (mode === 'rewind' && clock - modeStart >= rewindLength + 0.3) startReplay();
+    if (mode === 'rewind' && clock - modeStart >= REWIND + 0.3) startReplay();
     else if (mode === 'replay' && done) finishReplay();
     if (mode === 'live') {
       while (clock >= nextSpawn) {
@@ -197,33 +219,27 @@ function start() {
   function rewind() {
     if (mode !== 'live' || !petals.length) return;
     petals = petals.filter((p) => p.piled || clock - p.born < p.dur);
-    petals.forEach((p) => { p.rewindFrom = Math.min(clock - p.born, p.dur); });
-
-    // スナップショットは、先頭から10枚ごとの区切りのうち、全部が積もり終えている最後のもの。
-    // その後に何も無ければ、一つ前の区切りから（押して何も起きないことが無いように）
-    let landed = 0;
-    while (landed < petals.length && petals[landed].rewindFrom >= petals[landed].dur) landed++;
-    snapshotAt = Math.floor(landed / SNAPSHOT_EVERY) * SNAPSHOT_EVERY;
-    if (snapshotAt === petals.length) snapshotAt = Math.max(0, snapshotAt - SNAPSHOT_EVERY);
-
-    // 区切りの後の花びらだけを、新しいものから順に舞い上がらせる
-    const n = petals.length - snapshotAt;
-    for (let i = snapshotAt; i < petals.length; i++) petals[i].rewindDelay = LIFT_GAP * (petals.length - 1 - i);
-    rewindLength = LIFT + LIFT_GAP * Math.max(0, n - 1);
+    const n = petals.length;
+    petals.forEach((p, i) => {
+      p.rewindFrom = Math.min(clock - p.born, p.dur);
+      p.rewindDelay = (REWIND - LIFT) * (n - 1 - i) / Math.max(1, n - 1); // 新しいものから
+    });
     mode = 'rewind';
     modeStart = clock;
     document.documentElement.classList.add('is-replaying');
   }
 
   function startReplay() {
-    replayFrom = snapshotAt < petals.length ? petals[snapshotAt].born : 0;
+    replayFrom = petals[0].born;
+    replayLength = Math.max(...petals.map((p) => p.born - replayFrom + p.dur));
     mode = 'replay';
     modeStart = clock;
   }
 
   function finishReplay() {
-    // 再生した花びらの時刻を、今の時計に付け替えて live に戻す（積もる位置は変わらない）
-    for (let i = snapshotAt; i < petals.length; i++) petals[i].born = modeStart + (petals[i].born - replayFrom);
+    // 再生した時刻を今の時計に付け替えて live に戻す（積もる位置は変わらない）
+    const tau = replayTime(clock - modeStart);
+    petals.forEach((p) => { p.born = clock - (tau - (p.born - replayFrom)); });
     nextSpawn = clock + 2;
     mode = 'live';
     document.documentElement.classList.remove('is-replaying');
@@ -291,7 +307,8 @@ function start() {
     state() {
       const flying = petals.filter((p, i) => { const t = mode === 'rewind' ? -1 : elapsed(p, i); return t >= 0 && t < p.dur; }).length;
       return {
-        mode, count: petals.length, piled: countPiled(), flying, drawn: gems.count, snapshotAt,
+        mode, count: petals.length, piled: countPiled(), flying, drawn: gems.count,
+        replayTime: mode === 'replay' ? replayTime(clock - modeStart) : null, replayLength,
         // 積もる位置（ページ上の座標。スクロール位置によらない）
         rests: petals.filter((p) => p.piled).map((p) => [Math.round((p.x + p.drift) * W), Math.round(docH - 10 - p.lift)]),
         // 画面の下端 80px に描かれている、積もった花びらの数
