@@ -11,7 +11,21 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Yuji+Syuku&text=%E8%90%BD%E8%8A%B1&display=swap">
   <link rel="icon" href="{{ '/assets/images/rakkan.svg' | relative_url }}" type="image/svg+xml">
   <link rel="stylesheet" href="{{ '/assets/css/landing.css' | relative_url }}">
-  <script src="{{ '/assets/js/petals.js' | relative_url }}" defer></script>
+  <script>
+    /* 舞って積もる花びら（three.js）。動きを減らす設定のときと WebGL が使えないときは
+       読み込まない（ヒーローの静止した花びらが残る） */
+    (function () {
+      if (!window.matchMedia || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      try {
+        var c = document.createElement('canvas');
+        if (!(c.getContext('webgl2') || c.getContext('webgl'))) return;
+      } catch (e) { return; }
+      var s = document.createElement('script');
+      s.type = 'module';
+      s.src = '{{ '/assets/js/petals.js' | relative_url }}';
+      document.head.appendChild(s);
+    })();
+  </script>
   {%- include lang_twin.html %}
   <link rel="alternate" hreflang="{{ page.lang }}" href="{{ page.url | absolute_url }}">
   <link rel="alternate" hreflang="{{ twin_lang }}" href="{{ twin_url | absolute_url }}">
@@ -19,22 +33,15 @@
 <body>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
     <defs>
-      <clipPath id="petal-outline"><path d="M20 52 5 17C4 9 7 2 12 1c3-.5 6 1.5 8 6 2-4.5 5-6.5 8-6 5 1 8 8 7 16Z"/></clipPath>
-      <!-- 桜の花びらを、宝石のカットのように切り分ける（assets/js/petals.js と同じ形） -->
-      <symbol id="petal" viewBox="0 0 40 52">
-        <g clip-path="url(#petal-outline)" stroke="rgba(255,255,255,.18)" stroke-width=".5">
-        <polygon fill="#e9868d" points="5,0 12,1 5,17"/>
-        <polygon fill="#d9535c" points="12,1 12.5,17 5,17"/>
-        <polygon fill="#f2b3b5" points="12,1 20,7 12.5,17"/>
-        <polygon fill="#e46a73" points="20,7 20,17 12.5,17"/>
-        <polygon fill="#c63a44" points="20,7 27.5,17 20,17"/>
-        <polygon fill="#ee9aa0" points="20,7 28,1 27.5,17"/>
-        <polygon fill="#d0444e" points="28,1 35,17 27.5,17"/>
-        <polygon fill="#f4c0c1" points="28,1 35,0 35,17"/>
-        <polygon fill="#9e1b25" points="5,17 12.5,17 20,52"/>
-        <polygon fill="#c23040" points="12.5,17 20,17 20,52"/>
-        <polygon fill="#a81f2a" points="20,17 27.5,17 20,52"/>
-        <polygon fill="#86131c" points="27.5,17 35,17 20,52"/>
+      <!-- 宝石。正面から見ると Ruby のロゴの比率（横に広い上部と、下に尖る部分）。assets/js/petals.js の立体と同じ形 -->
+      <symbol id="petal" viewBox="0 0 48 42">
+        <g stroke="rgba(255,255,255,.22)" stroke-width=".5" stroke-linejoin="round">
+        <polygon fill="#f2b3b5" points="11,3 1,14 14,14 18,3"/>
+        <polygon fill="#e46a73" points="18,3 14,14 34,14 30,3"/>
+        <polygon fill="#ee9aa0" points="30,3 34,14 47,14 37,3"/>
+        <polygon fill="#a81f2a" points="1,14 14,14 24,41"/>
+        <polygon fill="#c23040" points="14,14 34,14 24,41"/>
+        <polygon fill="#86131c" points="34,14 47,14 24,41"/>
         </g>
       </symbol>
     </defs>
