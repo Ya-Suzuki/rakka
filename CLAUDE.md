@@ -30,14 +30,14 @@ ruby examples/postgres_demo.rb
 
 ## アーキテクチャ
 
-**アクター ≠ Ractor**。Ractorはシャード数（≒コア数）だけ作り、アクターはシャードRactor内のHashエントリ（behavior + state + version）として同居する（Akkaのディスパッチャ方式）。アクター数を増やしてもRactorは増えない。
+**アクター ≠ Ractor**。Ractorはシャード数（≒コア数）だけ作り、アクターはシャードRactor内のHashエントリ（behavior + state + version）として同居する（Akkaのディスパッチャ方式）。アクター数を増やしてもRactorは増えない。アクターの置き場所は `crc32(stream_id)` で決まるホームが基本で、負荷が偏ると空いているシャードへ移される。
 
 ### コアコンポーネント (rakka-core/lib/rakka/)
 
 | ファイル | 役割 |
 |---------|------|
 | `persistent_actor.rb` | 集約の定義（`initial_state` / `handle` / `apply_event`）と、コマンドを転送するだけの軽いハンドル。Ractorは持たない |
-| `actor_system.rb` | シャードRactorの起動、`crc32(stream_id) % shard_count` でのルーティング、返信待ちの管理、アクター間メッセージの配送 |
+| `actor_system.rb` | シャードRactorの起動、ルーティング（ホーム + 移動済みアクターの表）、返信待ちの管理、アクター間メッセージの配送、リバランス |
 | `shard.rb` | シャードRactor本体。アクターごとのメールボックスとスケジューリング、アクターの復元・コマンド処理・Passivation（アイドル/LRU）・アクター単位のクラッシュ処理 |
 | `supervisor.rb` | Ractor#monitorでシャードRactorの異常終了を検知して再起動 |
 | `event_store/base.rb` | EventStore共通API、`Serialization` |
@@ -79,6 +79,20 @@ EventBus (Main Thread) → subscribers
 - Outboxに溜めたメッセージは、イベントの永続化が成功した後に router port → メインRactorのrouterスレッド → 宛先シャードの順で配送される。競合でやり直した回・クラッシュした回の分は送られない
 - 配送は at-most-once（永続化の直後にプロセスが落ちると失われる）。確実に届けたい連携はイベントを購読する側（EventBus）で行う
 - `handle` の中から `send_command_sync` / `state` は使えない（シャードが止まるため例外になる）。`apply_event` / `initial_state` からは送れない
+
+### リバランス（アクターの移動）
+
+- `ActorSystem` は `rebalance_interval` 秒ごとに各シャードの未処理数を調べ、最大と最小の差が `rebalance_threshold` 以上なら、溜まっているアクターを空いているシャードへ `migrate` する
+- 移すのは「移すと差が縮まる」アクターだけ。1つのアクターに集中している場合は動かさない（動かしても偏りが移るだけ）
+- 移動済みアクターは `@routes`（stream_id => シャード番号）で管理。`MAX_ROUTES` を超えたら古いものからホームに戻す
+- `migrate` の手順（順序を保つための引き継ぎ）:
+  1. 移動先に `[:expect]` → 引き継ぎが届くまで、そのアクター宛てを保留（`@parked`）
+  2. ルートを切り替える（以降のメッセージは移動先で保留される）
+  3. 移動元に `[:release]` → 状態を捨て、未処理メッセージを移動先に `[:adopt]` で渡す
+  4. 移動先は「引き継いだ分 → 保留分」の順でメールボックスに入れ、メインに `[:adopted]` を通知（返信待ちの付け替え）
+- 「送り先を調べて送る」と「ルートの切り替え」は同じロック（`ActorSystem#@lock`）の中で行う。これが崩れると順序が入れ替わる
+- 移動中にシャードが落ちた場合: 移動元が落ちたらメインが移動先の保留を解く。移動先が落ちたら移動元が待っている呼び出しを `ShardUnavailable` で起こす
+- 状態そのものは運ばない。移動先がイベントから復元する（万一2つのシャードが同じアクターを処理しても、楽観ロックが整合性を守る）
 
 ### EventStoreとJournal
 

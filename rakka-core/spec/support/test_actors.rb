@@ -6,6 +6,8 @@ class Counter < Rakka::PersistentActor
   Crash = Data.define
   KillShard = Data.define
   Sleep = Data.define(:seconds)
+  SleepThenKillShard = Data.define(:seconds)
+  SlowIncrement = Data.define(:amount, :seconds)
   Forward = Data.define(:target_id, :amount)
   ForwardThenCrash = Data.define(:target_id, :amount)
   AskInside = Data.define(:target_id)
@@ -22,6 +24,8 @@ class Counter < Rakka::PersistentActor
   def increment_twice(amount) = send_command_sync(IncrementTwice[amount])
   def increment_async(amount = 1) = send_command(Increment[amount])
   def sleep_async(seconds) = send_command(Sleep[seconds])
+  def sleep_then_kill_shard_async(seconds) = send_command(SleepThenKillShard[seconds])
+  def slow_increment_async(amount, seconds) = send_command(SlowIncrement[amount, seconds])
   def forward(target_id, amount) = send_command_sync(Forward[target_id, amount])
   def forward_then_crash(target_id, amount) = send_command_sync(ForwardThenCrash[target_id, amount])
   def ask_inside(target_id) = send_command_sync(AskInside[target_id])
@@ -40,6 +44,12 @@ class Counter < Rakka::PersistentActor
     in Sleep(seconds:)
       sleep seconds
       [:noop]
+    in SleepThenKillShard(seconds:)
+      sleep seconds
+      raise Fatal, "shard down"
+    in SlowIncrement(amount:, seconds:)
+      sleep seconds
+      [:persist, Incremented[amount]]
     in Forward(target_id:, amount:)
       Counter.new(target_id).increment_async(amount)
       [:persist, Incremented[amount]]

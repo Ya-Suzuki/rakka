@@ -11,6 +11,8 @@ Akkaにインスパイアされた設計で、少数のRactor上に多数の軽�
 
 - **Ractor Native**: GVLを回避した真の並列処理
 - **軽量アクター**: アクターはRactorではなくシャードRactor内のエントリ。数万アクターでもRactorはコア数程度
+- **アクター単位のメールボックス**: 公平なスケジューリング、容量の上限、アクター間メッセージング
+- **リバランス**: 負荷が偏ると、溜まっているアクターを空いているシャードへ移す
 - **Event Sourcing**: イベントを永続化し、状態を再構築可能
 - **Actor Model**: メッセージパッシングによる安全な並行処理
 - **楽観ロック**: 複数プロセスから同じ集約に書いても整合する
@@ -111,6 +113,8 @@ Rakka.configure do |c|
   c.max_actors_per_shard = 10_000  # 1シャードがメモリに保持する上限（LRU）
   c.throughput = 5                 # 1アクターを続けて処理するメッセージ数
   c.mailbox_capacity = 1_000       # 1アクターに溜められるメッセージ数（デフォルト: 無制限）
+  c.rebalance_interval = 1         # 負荷の偏りを調べる間隔（秒）。false で無効
+  c.rebalance_threshold = 50       # シャード間の未処理数の差がこれ以上なら移す
 end
 ```
 
@@ -160,11 +164,12 @@ end
 
 ### ActorSystem
 
-シャードRactorの集合。`stream_id` のハッシュでシャードを決めるので、同じ集約のコマンドは常に同じシャードで直列に処理される。
+シャードRactorの集合。`stream_id` のハッシュでシャード（ホーム）を決め、同じ集約のコマンドは1つのシャードで直列に処理される。
 
 ```ruby
 Rakka.system.stats
-# => { shard_count: 4, active_count: 1234, queued: 0, restarts: {}, shards: [...] }
+# => { shard_count: 4, active_count: 1234, queued: 0, dropped: 0,
+#      migrations: 0, relocated: 0, restarts: {}, shards: [...] }
 
 # 明示的に作ることもできる
 system = Rakka::ActorSystem.new(event_store: store, shard_count: 2)
@@ -178,6 +183,19 @@ account = BankAccount.new("account-123", system: system)
 メールボックスはアクターごとに持つ。シャードは、メッセージを持つアクターを順番に `throughput` 件ずつ処理する（Akkaのディスパッチャと同じ方式）。あるアクターにコマンドが大量に溜まっていても、同じシャードの他のアクターは `throughput` 件ごとに順番が回ってくる。同じアクター宛てのメッセージは必ず到着順に処理される。
 
 `mailbox_capacity` を設定すると、溜まっているメッセージがその数に達したアクターは新しいメッセージを受け付けなくなる。`send_command_sync` は `Rakka::MailboxFull` を上げ、`send_command` は警告を出して破棄する。処理が追いつかないときにメモリを使い続ける代わりに、送り手に過負荷を伝える。
+
+### リバランス
+
+ハッシュでの割り当ては、アクターが多ければ均等になるが、忙しいアクターがたまたま同じシャードに集まると、そのシャードだけが詰まって他のコアが空く。ActorSystemは定期的に各シャードの未処理メッセージ数を比べ、差が `rebalance_threshold` 以上なら、溜まっているアクターをメールボックスごと空いているシャードへ移す。
+
+- 移動中もアクターごとのメッセージ順序は保たれる
+- 状態は運ばず、移動先がイベントから復元する（イベント数の多いアクターほど移動のコストが高い）
+- 1つのアクターにだけ負荷が集中している場合は移さない（1アクターは1シャードでしか処理できない）
+
+```ruby
+system.migrate("BankAccount-123", 2)   # 手動で移すこともできる
+system.shard_index("BankAccount-123")  # => 2
+```
 
 ### アクター間メッセージング
 
@@ -279,6 +297,7 @@ ruby examples/postgres_demo.rb
 
 ### Railsで使う場合
 
+- リバランスが働くのはプロセス内のシャード間だけ（プロセスをまたいだ移動はしない）
 - シャードRactorはプロセスごとに持つ。Pumaのクラスタモードでは各ワーカーが独立したActorSystemになる
 - ワーカーをまたいだ同時書き込みは楽観ロックで検出・再試行されるので整合性は保たれる（メモリ上のアクターは「単一ライターの保証」ではなく「状態キャッシュ + プロセス内の直列化」）
 - PostgreSQLのコネクション数は、プロセスあたり `shard_count + 1`

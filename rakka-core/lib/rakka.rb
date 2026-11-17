@@ -25,7 +25,7 @@ module Rakka
 
     # ActorSystem settings
     attr_writer :shard_count, :passivate_after, :max_actors_per_shard, :throughput,
-                :mailbox_capacity
+                :mailbox_capacity, :rebalance_threshold
 
     # PostgreSQL EventStore settings
     attr_writer :postgres_host, :postgres_port,
@@ -56,6 +56,21 @@ module Rakka
     # MailboxFull になる。nil（デフォルト）は無制限
     def mailbox_capacity
       @mailbox_capacity || ENV["RAKKA_MAILBOX_CAPACITY"]&.to_i
+    end
+
+    # 負荷の偏りを調べる間隔（秒）。false でリバランスしない
+    attr_writer :rebalance_interval
+
+    def rebalance_interval
+      return nil if @rebalance_interval == false
+
+      @rebalance_interval || ENV.fetch("RAKKA_REBALANCE_INTERVAL", 1).to_f
+    end
+
+    # シャード間の未処理メッセージ数の差がこれ以上になったら、溜まっているアクターを
+    # 空いているシャードへ移す
+    def rebalance_threshold
+      @rebalance_threshold || ENV.fetch("RAKKA_REBALANCE_THRESHOLD", 50).to_i
     end
 
     def postgres_host
@@ -118,7 +133,9 @@ module Rakka
           passivate_after: configuration.passivate_after,
           max_actors_per_shard: configuration.max_actors_per_shard,
           throughput: configuration.throughput,
-          mailbox_capacity: configuration.mailbox_capacity
+          mailbox_capacity: configuration.mailbox_capacity,
+          rebalance_interval: configuration.rebalance_interval,
+          rebalance_threshold: configuration.rebalance_threshold
         )
       end
     end
