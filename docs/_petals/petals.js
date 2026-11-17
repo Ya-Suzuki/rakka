@@ -22,7 +22,7 @@ import {
 const BINS = 72;          // 積もる位置の区切り（画面幅によらず一定。幅を変えても同じ山になる）
 const LAYER = 3.4;        // 1枚積もるごとに山が高くなる量（px）
 const HEAP_MAX = 40;      // 山の高さの上限（px）
-const PILE_MAX = 180;     // 積もらせる枚数の上限。超えたら画面の外へ落ちて消える
+const PILE_MAX = 90;      // 積もらせる枚数の上限。超えたら画面の外へ落ちて消える
 const REWIND = 2.4;       // 巻き戻しにかける秒数（全体）
 const LIFT = 1.2;         // 一枚が舞い上がるのにかける秒数。最後に散ったものから順に、ずらして上がる
 const MAX_SPEED = 50;     // 早送りの上限（倍）。これより速いと、落ちる途中が見えず下端に突然現れて見える
@@ -209,7 +209,7 @@ function start() {
     if (mode === 'live') {
       while (clock >= nextSpawn) {
         spawn(nextSpawn);
-        nextSpawn += 3 + random() * 3.5; // 同時に舞うのは3〜4枚ほど
+        nextSpawn += 6.5 + random() * 5; // 同時に舞うのは2枚ほど
       }
       petals = petals.filter((p) => p.piled || clock - p.born < p.dur); // 積もらない花びらは落ちきったら捨てる
     }
