@@ -19,6 +19,15 @@ module Rakka
 
           ::Rails.logger&.info "[Rakka] EventStore configured (#{Rakka.configuration.shard_count} shards per process)"
         end
+
+        # イベントハンドラ（読みモデルの更新など）はRakkaのスレッドで呼ばれる。
+        # executorで包み、DB接続の返却とコードの再読み込みとの排他をRailsに任せる
+        Rakka.event_bus.around_publish { |publish| app.executor.wrap { publish.call } }
+
+        # コードを再読み込みすると集約クラスは作り直されるが、シャードが持っている
+        # アクターは古いクラスのまま残り、次のコマンドが必ず失敗する。再読み込みの前に
+        # ActorSystemを止め、次のコマンドで作り直す（アクターの状態はイベントから戻る）
+        app.reloader.before_class_unload { Rakka.shutdown }
       end
 
       generators do

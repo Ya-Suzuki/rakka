@@ -60,3 +60,29 @@ RSpec.describe Rakka::Rails::Railtie do
     expect(Rakka.system.stats).to include(shard_count: 2)
   end
 end
+
+RSpec.describe "Rakka in a Rails process" do
+  it "runs event handlers inside the Rails executor" do
+    inside = Queue.new
+    Rakka.subscribe(RailsAccount::Deposited) { inside << Rails.application.executor.active? }
+
+    Rakka.event_bus.publish(RailsAccount::Deposited[1], {})
+
+    expect(inside.pop(timeout: 1)).to be(true)
+  ensure
+    Rakka.event_bus.clear
+  end
+
+  it "restarts the actor system when code is reloaded" do
+    store = Rakka::EventStore::Memory.new
+    Rakka.configure { |c| c.event_store = store }
+    before = Rakka.system
+
+    Rails.application.reloader.new.class_unload! {} # 再読み込み直前に走るコールバック
+
+    expect(Rakka.system).not_to equal(before)
+  ensure
+    Rakka.shutdown
+    Rakka.configure { |c| c.event_store = Rakka::Rails.configuration.build_event_store }
+  end
+end
