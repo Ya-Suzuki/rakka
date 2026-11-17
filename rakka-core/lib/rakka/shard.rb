@@ -36,19 +36,49 @@ module Rakka
     # シャードRactorごと落ち、Supervisorが再起動する
     ACTOR_ERRORS = [StandardError, ScriptError].freeze
 
+    # handle の中から他のアクターへ送るメッセージを、コマンドの処理が済むまで預かる。
+    # シャードRactor内では PersistentActor のハンドルがこれを送信先として使う
+    class Outbox
+      def open
+        @messages = []
+      end
+
+      def close
+        messages = @messages
+        @messages = nil
+        messages
+      end
+
+      def tell(actor_class, id, command)
+        raise Error, "an actor can send messages only from handle" unless @messages
+
+        @messages << [:tell, actor_class, id, command]
+        nil
+      end
+
+      # 返信を待つとシャードごと止まり、相手が同じシャードならデッドロックする
+      def ask(*)
+        raise Error, "an actor cannot wait for another actor (use send_command, not send_command_sync)"
+      end
+      alias state_of ask
+      alias passivate ask
+    end
+
     # options: passivate_after, max_actors, throughput, mailbox_capacity
-    def self.spawn(index, connector, publisher_port, **options)
-      Ractor.new(index, connector, publisher_port, Ractor.make_shareable(options),
-                 name: "rakka-shard-#{index}") do |i, conn, publisher, opts|
-        Rakka::Shard.new(i, conn.connect, publisher, **opts).run
+    def self.spawn(index, connector, publisher_port, router_port, **options)
+      Ractor.new(index, connector, publisher_port, router_port, Ractor.make_shareable(options),
+                 name: "rakka-shard-#{index}") do |i, conn, publisher, router, opts|
+        Rakka::Shard.new(i, conn.connect, publisher, router, **opts).run
       end
     end
 
-    def initialize(index, journal, publisher_port, passivate_after:, max_actors:, throughput:,
-                   mailbox_capacity: nil)
+    def initialize(index, journal, publisher_port, router_port, passivate_after:, max_actors:,
+                   throughput:, mailbox_capacity: nil)
       @index = index
       @journal = journal
       @publisher = publisher_port
+      @router = router_port
+      @outbox = Outbox.new
       @passivate_after = passivate_after
       @max_actors = max_actors
       @throughput = throughput
@@ -68,6 +98,8 @@ module Rakka
     end
 
     def run
+      Ractor.current[:rakka_context] = @outbox
+
       until @stopping && @mailboxes.empty?
         if @mailboxes.empty?
           dispatch(Ractor.receive) # 仕事が無いので届くまで待つ
@@ -153,7 +185,11 @@ module Rakka
       begin
         entry = activate(actor_class, id, stream_id)
 
-        case entry.behavior.handle(command, entry.state)
+        @outbox.open
+        result = entry.behavior.handle(command, entry.state)
+        outgoing = @outbox.close
+
+        case result
         in [:persist, *events] unless events.empty?
           persist(entry, id, stream_id, events)
           respond(reply, [:ok, events.size == 1 ? events.first : events])
@@ -163,6 +199,9 @@ module Rakka
           respond(reply, [:noop])
         end
 
+        # 他のアクター宛ては、永続化まで成功してから送る。競合でやり直した回や
+        # クラッシュした回の分は送られない
+        outgoing.each { |message| @router.send(message) }
         @processed += 1
       rescue ConcurrencyError => e
         # 他のライター（別プロセスなど）が先に書いた。キャッシュした状態を捨て、
@@ -172,6 +211,8 @@ module Rakka
         respond(reply, [:conflict, e.message])
       rescue *ACTOR_ERRORS => e
         crash(stream_id, e, reply)
+      ensure
+        @outbox.close
       end
     end
 

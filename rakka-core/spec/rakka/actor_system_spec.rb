@@ -166,6 +166,67 @@ RSpec.describe Rakka::ActorSystem do
     end
   end
 
+  describe "actor-to-actor messaging" do
+    # 別々のシャードに載る2つのID
+    let(:ids) { %w[a b c d e f].group_by { |id| system.shard_index("Counter-#{id}") }.values_at(0, 1).map(&:first) }
+
+    it "delivers a message sent from handle to an actor on another shard" do
+      from, to = ids
+
+      expect(counter(from).forward(to, 5)).to eq([:ok, Counter::Incremented[5]])
+
+      eventually { counter(to).count == 5 }
+      expect(counter(from).count).to eq(5)
+    end
+
+    context "with a single shard" do
+      let(:system) { described_class.new(event_store: event_store, shard_count: 1) }
+
+      it "delivers to an actor on the same shard" do
+        counter("a").forward("b", 5)
+
+        eventually { counter("b").count == 5 }
+      end
+
+      it "delivers to itself" do
+        counter("a").forward("a", 5)
+
+        eventually { counter("a").count == 10 }
+      end
+
+      it "keeps the order of messages from one sender" do
+        (1..5).each { |i| counter("a").forward("b", i) }
+
+        eventually { event_store.stream_size("Counter-b") == 5 }
+        expect(event_store.read_stream("Counter-b").map(&:amount)).to eq((1..5).to_a)
+      end
+
+      it "sends nothing when the command crashes" do
+        expect { counter("a").forward_then_crash("b", 99) }.to raise_error(Rakka::ActorCrashed)
+        counter("a").forward("b", 1)
+
+        eventually { counter("b").count.positive? }
+        expect(event_store.read_stream("Counter-b").map(&:amount)).to eq([1])
+      end
+
+      it "sends once when the command is retried after a conflict" do
+        counter("a").increment(1)
+        event_store.append("Counter-a", Counter::Incremented[1]) # 別ライターが先に書く → 1回目は競合
+
+        counter("a").forward("b", 5)
+        counter("a").forward("b", 7)
+
+        eventually { event_store.stream_size("Counter-b") == 2 }
+        expect(event_store.read_stream("Counter-b").map(&:amount)).to eq([5, 7])
+      end
+
+      it "does not let an actor wait for another actor" do
+        expect { counter("a").ask_inside("b") }
+          .to raise_error(Rakka::ActorCrashed, /cannot wait for another actor/)
+      end
+    end
+  end
+
   describe "event publishing" do
     it "publishes persisted events with metadata" do
       port = Ractor::Port.new

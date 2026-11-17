@@ -26,10 +26,16 @@ module Rakka
         max_restarts: max_restarts, within: within, on_crash: method(:fail_pending)
       ).start
 
+      # シャード → メインへの連絡口。アクターが他のアクターに送るメッセージは
+      # ここを通り、送信先のシャードへ配送される
+      @router_port = Ractor::Port.new
+      router_port = @router_port
+      @router = Thread.new { route_messages }
+
       connector = event_store.connector
       shard_count.times do |index|
         @supervisor.supervise(index) do
-          Shard.spawn(index, connector, publisher_port,
+          Shard.spawn(index, connector, publisher_port, router_port,
                       passivate_after: passivate_after, max_actors: max_actors_per_shard,
                       throughput: throughput, mailbox_capacity: mailbox_capacity)
         end
@@ -122,6 +128,9 @@ module Rakka
       end
 
       @supervisor.stop
+      @router_port.send([:stop])
+      @router.join
+      @router_port.close
     end
 
     def shard_index(stream_id)
@@ -170,6 +179,21 @@ module Rakka
         port.send([:shard_crashed])
       rescue Ractor::ClosedError
         nil
+      end
+    end
+
+    def route_messages
+      loop do
+        case @router_port.receive
+        in [:tell, actor_class, id, command]
+          begin
+            tell(actor_class, id, command)
+          rescue Error => e
+            warn "[Rakka] message to #{actor_class.stream_id(id)} was not delivered: #{e.message}"
+          end
+        in [:stop]
+          break
+        end
       end
     end
 

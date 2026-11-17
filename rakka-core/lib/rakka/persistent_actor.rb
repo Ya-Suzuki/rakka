@@ -7,6 +7,18 @@ module Rakka
   # シャードRactorの中で呼ばれる。インスタンス（BankAccount.new("id")）は
   # Ractorもスレッドも持たない軽いハンドルで、コマンドをActorSystemに転送するだけ。
   # アクターの状態はシャードのメモリ上にあり、無ければイベントから復元される。
+  #
+  # handle の中で他のアクターのハンドルを作り、非同期のコマンドを送ることができる:
+  #
+  #   def handle(command, state)
+  #     case command
+  #     in Transfer(to:, amount:)
+  #       BankAccount.new(to).deposit_later(amount)   # send_command を使うメソッド
+  #       [:persist, MoneyWithdrawn[amount]]
+  #     end
+  #   end
+  #
+  # 送信はイベントの永続化が成功した後に行われる（at-most-once）。
   class PersistentActor
     attr_reader :id
 
@@ -57,7 +69,7 @@ module Rakka
 
     protected
 
-    # 非同期（fire & forget）
+    # 非同期（fire & forget）。handle の中から他のアクターに送るときもこれを使う
     def send_command(command)
       system.tell(self.class, id, command)
     end
@@ -69,8 +81,10 @@ module Rakka
 
     private
 
+    # シャードRactorの中（= handle の中で作られたハンドル）では、送信先は
+    # そのシャードのOutboxになる
     def system
-      @system || Rakka.system
+      @system || Ractor.current[:rakka_context] || Rakka.system
     end
   end
 end
