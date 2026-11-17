@@ -211,8 +211,8 @@ code {
   position: absolute;
   top: -60px;
   left: var(--x);
-  width: calc(28px * var(--s));
-  height: calc(24.5px * var(--s));
+  width: calc(29px * var(--s));
+  height: calc(24px * var(--s));
   animation: fall var(--d) linear var(--delay) infinite;
   will-change: transform;
 }

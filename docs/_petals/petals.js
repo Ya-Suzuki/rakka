@@ -8,9 +8,9 @@
  * 積もる位置も、散った順番だけで決まる。Rakka がイベントから状態を作り直すのと同じ。
  */
 import {
-  BufferGeometry, Color, DirectionalLight, DynamicDrawUsage, Float32BufferAttribute,
+  BufferGeometry, Color, DirectionalLight, DoubleSide, DynamicDrawUsage, Float32BufferAttribute,
   HemisphereLight, InstancedMesh, MeshPhongMaterial, Object3D, OrthographicCamera,
-  Scene, Vector3, WebGLRenderer
+  Scene, WebGLRenderer
 } from 'three';
 
 const BINS = 72;          // 積もる位置の区切り（画面幅によらず一定。幅を変えても同じ山になる）
@@ -20,36 +20,21 @@ const PILE_MAX = 180;     // 積もらせる枚数の上限。超えたら画面
 const REWIND = 2.4;       // 巻き戻しにかける秒数（全体）
 const LIFT = 1.1;         // 一枚が舞い上がるのにかける秒数。最後に散ったものから順に、ずらして上がる
 const REPLAY_SPAN = 4.5;  // 再生で、最後の花びらが散り始めるまでの秒数
-const SIZE = 21;          // 宝石の大きさ（幅 1.2 に掛ける px）
+const SIZE = 22;          // 花びらの大きさ（幅 1.24 に掛ける px）
 const CAPACITY = 256;
 
-// --- 宝石の形: 正面から見ると Ruby のロゴの比率（横に広い上部と、下に尖る部分） ---
-function gemGeometry() {
-  const n = 8, depth = 0.42; // 薄くして、回ると花びらのように翻る
-  const ring = (r, y) => Array.from({ length: n }, (_, i) => {
-    const a = (i + 0.5) / n * Math.PI * 2;
-    return new Vector3(r * Math.cos(a), y, r * depth * Math.sin(a));
-  });
-  const girdle = ring(0.6, 0), table = ring(0.38, 0.3);
-  const top = new Vector3(0, 0.3, 0), tip = new Vector3(0, -0.72, 0);
-  const center = new Vector3(0, -0.1, 0);
-  const pos = [];
-  const tri = (a, b, c) => {
-    // 外向きの面になるように向きをそろえる（平らな陰影で面ごとに光り方が変わる）
-    const normal = new Vector3().subVectors(b, a).cross(new Vector3().subVectors(c, a));
-    const mid = new Vector3().add(a).add(b).add(c).divideScalar(3).sub(center);
-    if (normal.dot(mid) < 0) [b, c] = [c, b];
-    pos.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
-  };
-  for (let i = 0; i < n; i++) {
-    const j = (i + 1) % n;
-    tri(top, table[i], table[j]);               // テーブル
-    tri(table[i], table[j], girdle[j]);         // クラウン
-    tri(table[i], girdle[j], girdle[i]);
-    tri(tip, girdle[i], girdle[j]);             // パビリオン
-  }
+// --- 花びらの形 ---
+// 輪郭は Ruby のロゴに寄せ（上辺はほぼ平ら、両側は真っすぐ先端へ。横に広い）、上辺の中央に
+// 桜の花びらの浅い切れ込み。表面は宝石のようなカット（ローポリゴンの面）。薄い一枚で、縁が
+// 後ろへ反っている。色は根元の深い赤から先端の明るい赤へ。
+// 形のデータは shape.py が作る（_layouts/landing.html の SVG は、これを正面から見た形）
+const PETAL_POSITIONS = [0, 0.45, 0.05, 0.07, 0.52, 0.0414, 0, 0.22, 0.05, 0.07, 0.52, 0.0414, 0.3, 0.54, -0.025, 0.32, 0.26, -0.0336, 0.07, 0.52, 0.0414, 0.32, 0.26, -0.0336, 0, 0.22, 0.05, 0.3, 0.54, -0.025, 0.5, 0.52, -0.1306, 0.32, 0.26, -0.0336, 0.5, 0.52, -0.1306, 0.6, 0.42, -0.2, 0.32, 0.26, -0.0336, 0.6, 0.42, -0.2, 0.57, 0.24, -0.178, 0.32, 0.26, -0.0336, 0.32, 0.26, -0.0336, 0.57, 0.24, -0.178, 0, -0.12, 0.05, 0.57, 0.24, -0.178, 0.45, 0.02, -0.1, 0, -0.12, 0.05, 0.45, 0.02, -0.1, 0.27, -0.25, -0.013, 0, -0.12, 0.05, 0.27, -0.25, -0.013, 0, -0.5, 0.05, 0, -0.12, 0.05, 0, 0.22, 0.05, 0.32, 0.26, -0.0336, 0, -0.12, 0.05, 0, 0.45, 0.05, -0.07, 0.52, 0.0414, 0, 0.22, 0.05, -0.07, 0.52, 0.0414, -0.3, 0.54, -0.025, -0.32, 0.26, -0.0336, -0.07, 0.52, 0.0414, -0.32, 0.26, -0.0336, 0, 0.22, 0.05, -0.3, 0.54, -0.025, -0.5, 0.52, -0.1306, -0.32, 0.26, -0.0336, -0.5, 0.52, -0.1306, -0.6, 0.42, -0.2, -0.32, 0.26, -0.0336, -0.6, 0.42, -0.2, -0.57, 0.24, -0.178, -0.32, 0.26, -0.0336, -0.32, 0.26, -0.0336, -0.57, 0.24, -0.178, 0, -0.12, 0.05, -0.57, 0.24, -0.178, -0.45, 0.02, -0.1, 0, -0.12, 0.05, -0.45, 0.02, -0.1, -0.27, -0.25, -0.013, 0, -0.12, 0.05, -0.27, -0.25, -0.013, 0, -0.5, 0.05, 0, -0.12, 0.05, 0, 0.22, 0.05, -0.32, 0.26, -0.0336, 0, -0.12, 0.05];
+const PETAL_COLORS = [0.6867, 0.0887, 0.1144, 0.7454, 0.1144, 0.1441, 0.5583, 0.0343, 0.0513, 0.7454, 0.1144, 0.1441, 0.8148, 0.1413, 0.1746, 0.6445, 0.0561, 0.0782, 0.7454, 0.1144, 0.1441, 0.6445, 0.0561, 0.0782, 0.5583, 0.0343, 0.0513, 0.8148, 0.1413, 0.1746, 0.8469, 0.15, 0.1845, 0.6445, 0.0561, 0.0782, 0.8469, 0.15, 0.1845, 0.807, 0.1221, 0.1529, 0.6445, 0.0561, 0.0782, 0.807, 0.1221, 0.1529, 0.6795, 0.0648, 0.0887, 0.6445, 0.0561, 0.0782, 0.6445, 0.0561, 0.0782, 0.6795, 0.0648, 0.0887, 0.3763, 0.011, 0.0194, 0.6795, 0.0648, 0.0887, 0.5271, 0.0252, 0.0395, 0.3763, 0.011, 0.0194, 0.5271, 0.0252, 0.0395, 0.3467, 0.0137, 0.0242, 0.3763, 0.011, 0.0194, 0.3467, 0.0137, 0.0242, 0.2086, 0.0052, 0.011, 0.3763, 0.011, 0.0194, 0.5583, 0.0343, 0.0513, 0.6445, 0.0561, 0.0782, 0.3763, 0.011, 0.0194, 0.6867, 0.0887, 0.1144, 0.7454, 0.1144, 0.1441, 0.5583, 0.0343, 0.0513, 0.7454, 0.1144, 0.1441, 0.8148, 0.1413, 0.1746, 0.6445, 0.0561, 0.0782, 0.7454, 0.1144, 0.1441, 0.6445, 0.0561, 0.0782, 0.5583, 0.0343, 0.0513, 0.8148, 0.1413, 0.1746, 0.8469, 0.15, 0.1845, 0.6445, 0.0561, 0.0782, 0.8469, 0.15, 0.1845, 0.807, 0.1221, 0.1529, 0.6445, 0.0561, 0.0782, 0.807, 0.1221, 0.1529, 0.6795, 0.0648, 0.0887, 0.6445, 0.0561, 0.0782, 0.6445, 0.0561, 0.0782, 0.6795, 0.0648, 0.0887, 0.3763, 0.011, 0.0194, 0.6795, 0.0648, 0.0887, 0.5271, 0.0252, 0.0395, 0.3763, 0.011, 0.0194, 0.5271, 0.0252, 0.0395, 0.3467, 0.0137, 0.0242, 0.3763, 0.011, 0.0194, 0.3467, 0.0137, 0.0242, 0.2086, 0.0052, 0.011, 0.3763, 0.011, 0.0194, 0.5583, 0.0343, 0.0513, 0.6445, 0.0561, 0.0782, 0.3763, 0.011, 0.0194];
+
+function petalGeometry() {
   const g = new BufferGeometry();
-  g.setAttribute('position', new Float32BufferAttribute(pos, 3));
+  g.setAttribute('position', new Float32BufferAttribute(PETAL_POSITIONS, 3));
+  g.setAttribute('color', new Float32BufferAttribute(PETAL_COLORS, 3));
   g.computeVertexNormals();
   return g;
 }
@@ -62,17 +47,19 @@ function start() {
   renderer.setClearColor(0x000000, 0);
 
   const scene = new Scene();
-  // 深い赤の地に、面ごとの鋭いきらめき（Ruby の宝石のように）
-  scene.add(new HemisphereLight(0xfff1ec, 0x2a0408, 1.1));
-  const key = new DirectionalLight(0xffffff, 2.4);
+  // 面ごとに光り方が変わる（カット）が、きらめきは花びらの艶ていどに抑える
+  scene.add(new HemisphereLight(0xfff3ee, 0x3a0a10, 1.2));
+  const key = new DirectionalLight(0xffffff, 1.9);
   key.position.set(-1, 1.5, 2);
   scene.add(key);
-  const rim = new DirectionalLight(0xff8090, 0.9);
+  const rim = new DirectionalLight(0xffb0ba, 0.7);
   rim.position.set(1.3, -0.8, 1);
   scene.add(rim);
 
-  const material = new MeshPhongMaterial({ color: 0xffffff, specular: 0xffffff, shininess: 90, flatShading: true });
-  const gems = new InstancedMesh(gemGeometry(), material, CAPACITY);
+  const material = new MeshPhongMaterial({
+    vertexColors: true, specular: 0x6a3a3e, shininess: 36, flatShading: true, side: DoubleSide
+  });
+  const gems = new InstancedMesh(petalGeometry(), material, CAPACITY);
   gems.instanceMatrix.setUsage(DynamicDrawUsage);
   gems.frustumCulled = false;
   scene.add(gems);
@@ -111,8 +98,11 @@ function start() {
       spin: (random() - 0.5) * 140,
       flipF: 1.4 + random() * 2.6, tumbleF: 0.8 + random() * 1.6,
       scale,
-      restRot: random() * Math.PI * 2, restYaw: random() * Math.PI * 2, restPitch: (random() - 0.5) * 1.2,
-      color: new Color().setHSL(0.988 + shade * 0.015, 0.82, 0.3 + shade * 0.1),
+      // 積もったときは、表か裏をこちらに向けて重なる（真横を向いて線にならないように）
+      restRot: random() * Math.PI * 2,
+      restYaw: (random() - 0.5) * 1.6 + (random() < 0.4 ? Math.PI : 0),
+      restPitch: (random() - 0.5) * 1.1,
+      color: new Color().setScalar(0.82 + shade * 0.18), // 花びらごとの濃淡（頂点の色に掛ける）
       jitter: (random() - 0.5) * 6,
       piled: false, lift: 0
     };
