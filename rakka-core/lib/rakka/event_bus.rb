@@ -22,19 +22,30 @@ module Rakka
       end
     end
 
+    # ハンドラの呼び出しを包む処理を設定する。ブロックはハンドラ群を呼ぶ proc を受け取る。
+    # Railsでは executor で包み、DB接続の返却やコードの再読み込みとの排他を任せる:
+    #
+    #   bus.around_publish { |publish| Rails.application.executor.wrap { publish.call } }
+    def around_publish(&wrapper)
+      @wrapper = wrapper
+    end
+
     # イベントを発行
     def publish(event, metadata = {})
       handlers = @mutex.synchronize do
         @handlers[event.class.name] + @global_handlers
       end
+      return if handlers.empty?
 
-      handlers.each do |handler|
-        begin
+      run = lambda do
+        handlers.each do |handler|
           handler.call(event, metadata)
         rescue => e
-          warn "[EventBus] Handler error: #{e.message}"
+          warn "[EventBus] Handler error: #{e.class}: #{e.message}"
         end
       end
+
+      @wrapper ? @wrapper.call(run) : run.call
     end
 
     # 非同期でイベントを発行（別スレッドで実行）

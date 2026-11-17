@@ -145,6 +145,8 @@ ractor.send([:command, actor_class, id, stream_id, cmd, nil])
 - `config.rakka`（`config/initializers/rakka.rb`）の内容を `Rakka::Rails.apply` が `Rakka.configure` に渡す。渡す項目は `Rakka::Rails::SETTINGS`。本体に設定項目を足したらここにも足す
 - 反映は `after_initialize` で行う（`config/initializers` はRailtieのinitializerより後に読まれるため）
 - ジェネレータは `lib/rakka/rails/generators/` にあり、Railsの探索パス外なので Railtie の `generators` ブロックで読み込む
+- イベントハンドラは `Rakka.event_bus.around_publish` で Rails の executor に包んで呼ぶ（DB接続の返却、再読み込みとの排他）
+- コードの再読み込み前（`reloader.before_class_unload`）に `Rakka.shutdown` する。シャードが古いクラスのアクターを持ったままだと、再読み込み後の最初のコマンドがパターンマッチに失敗するため
 
 ## Ractor制約
 
