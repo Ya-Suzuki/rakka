@@ -11,7 +11,7 @@ nav_order: 2
 
 ## 必要環境
 
-| | |
+| 項目 | 内容 |
 |---|---|
 | Ruby | 4.0 以上（`Ractor::Port` を使う） |
 | データベース | PostgreSQL（`pg` gem）。Ractor から使えないドライバ（`sqlite3`、`mysql2`）には対応しない |

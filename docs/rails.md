@@ -44,7 +44,7 @@ Rakka.subscribe_all { |event, metadata| Projections.apply(event, metadata) }
 
 ## rakka-rails が自動で行うこと
 
-| | |
+| 項目 | 内容 |
 |---|---|
 | 設定の反映 | `config/initializers` を読み終えた後（`after_initialize`）に反映する |
 | executor | イベントハンドラを Rails の executor で包んで呼ぶ。DB 接続の返却と、コードの再読み込みとの排他を Rails に任せる |

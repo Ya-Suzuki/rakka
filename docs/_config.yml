@@ -10,6 +10,20 @@ plugins:
   - jekyll-include-cache
   - jekyll-seo-tag
 
+color_scheme: rakka
+
+# 注記。色は _sass/color_schemes/rakka.scss の $shu / $sumi / $kitsune
+callouts:
+  note:
+    title: '\30E1\30E2' # メモ（CSS のエスケープ。SCSS は ASCII のみにする）
+    color: sumi
+  important:
+    title: '\5927\4E8B\306A\3053\3068' # 大事なこと（CSS のエスケープ。SCSS は ASCII のみにする）
+    color: shu
+  warning:
+    title: '\6CE8\610F' # 注意（CSS のエスケープ。SCSS は ASCII のみにする）
+    color: kitsune
+
 search_enabled: true
 search:
   heading_level: 3

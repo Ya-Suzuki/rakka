@@ -1,0 +1,241 @@
+// Rakka styling. Colors: custom/setup.scss, theme variables: color_schemes/rakka.scss
+
+$mincho: "Shippori Mincho B1", "Hiragino Mincho ProN", "Yu Mincho", serif;
+
+::selection {
+  background: $sakura;
+  color: $sumi;
+}
+
+body {
+  font-feature-settings: "palt";
+  letter-spacing: 0.02em;
+}
+
+// --- Headings: mincho, with a short vermilion stroke under h1 ---
+.main-content {
+  h1, h2, h3 {
+    font-family: $mincho;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+  }
+
+  h1 {
+    font-size: 2.1rem !important;
+    padding-bottom: 0.6rem;
+    margin-bottom: 1.4rem;
+    position: relative;
+
+    &::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: 2.6rem;
+      height: 4px;
+      border-radius: 4px 1px 6px 1px;
+      background: linear-gradient(90deg, $shu, $shu-bright 70%, rgba($shu-bright, 0));
+    }
+  }
+
+  h2 {
+    font-size: 1.45rem !important;
+    margin-top: 2.6rem;
+    padding-top: 1.2rem;
+    border-top: 1px solid $washi-line;
+  }
+
+  h3 {
+    font-size: 1.15rem !important;
+  }
+
+  a:not(.btn) {
+    text-decoration-color: rgba($shu, 0.35);
+    text-underline-offset: 0.2em;
+
+    &:hover {
+      text-decoration-color: $shu;
+    }
+  }
+
+  strong {
+    color: $sumi;
+  }
+
+  hr {
+    background: none;
+    border-top: 1px solid $washi-line;
+  }
+}
+
+// --- Sidebar: title with the seal (rakkan) ---
+.site-title {
+  font-family: $mincho;
+  font-weight: 700;
+  font-size: 1.45rem !important;
+  letter-spacing: 0.06em;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.nav-list .nav-list-item .nav-list-link {
+  color: $sumi-soft;
+
+  &.active {
+    color: $shu;
+    font-weight: 700;
+    background-image: none;
+    box-shadow: inset 3px 0 0 $shu;
+  }
+
+  &:hover {
+    background-image: none;
+    background-color: rgba($shu, 0.06);
+  }
+}
+
+.site-footer {
+  color: $nezumi;
+}
+
+// Seal (rakkan), used by title.html
+.rakkan {
+  display: inline-grid;
+  place-items: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  flex: none;
+  border-radius: 5px 7px 4px 6px;
+  background: $shu;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.18), 0 1px 0 rgba($sumi, 0.15);
+  color: #fff6ef;
+  font-family: "Yuji Syuku", $mincho;
+  font-size: 0.82rem;
+  line-height: 1;
+  writing-mode: vertical-rl;
+  letter-spacing: 0.05em;
+  transform: rotate(-4deg);
+}
+
+// --- Search ---
+.search-input {
+  background-color: transparent;
+}
+
+.search-result-highlight {
+  color: $shu;
+  font-weight: 700;
+}
+
+// --- Tables ---
+.table-wrapper {
+  box-shadow: none;
+  border: 1px solid $washi-line;
+  border-radius: 6px;
+}
+
+th {
+  background-color: $washi-deep;
+  color: $sumi;
+  font-weight: 700;
+}
+
+th, td {
+  border-color: $washi-line !important;
+}
+
+// --- Buttons ---
+.btn {
+  border-radius: 999px;
+  box-shadow: none;
+  font-weight: 700;
+  padding: 0.45rem 1.3rem;
+  border: 1px solid $washi-line;
+}
+
+.btn-primary {
+  background: $shu;
+  border-color: $shu;
+  color: #fff8f2;
+  box-shadow: 0 6px 16px -8px rgba($shu, 0.7);
+
+  &:hover, &.zeroclipboard-is-hover {
+    background: $shu-bright;
+    color: #fff;
+  }
+}
+
+// --- Code: sumi-ink blocks on paper ---
+.main-content :not(pre) > code {
+  background: #efe5d6;
+  border: 0;
+  color: $sumi;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  font-size: 0.86em;
+}
+
+div.highlighter-rouge, figure.highlight {
+  border-radius: 10px;
+  border: 0;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 12px 28px -18px rgba($sumi, 0.6);
+}
+
+.highlight, pre.highlight {
+  background: $code-background-color !important;
+  color: #efe6d8;
+
+  code {
+    font-size: 0.84rem;
+    line-height: 1.7;
+  }
+
+  .c, .c1, .cm, .cs, .ch, .cd { color: #8f8377; font-style: italic; }   // comments
+  .k, .kd, .kn, .kp, .kr, .kv, .ow { color: #f08a7e; }                    // keywords
+  .kc { color: #f2c57c; }
+  .nc, .no, .nn { color: #f2c57c; }                                       // classes, constants
+  .nf, .fm { color: #f6e6c8; }                                            // method names
+  .ss, .s, .s1, .s2, .sb, .sh, .sx, .sr, .se, .si { color: #bcd48e; }     // strings
+  .ss { color: #e8b39e; }
+  .mi, .mf, .m, .mh, .il { color: #f2c57c; }
+  .o, .p { color: #cdbfac; }
+  .nv, .vi, .vc, .vg, .n, .nb, .bp, .na { color: #efe6d8; }
+  .err { color: #efe6d8; background: none; }
+}
+
+.code-copy-button {
+  color: #cdbfac;
+}
+
+// --- Callouts ---
+p.note, p.important, p.warning,
+blockquote.note, blockquote.important, blockquote.warning {
+  box-shadow: none;
+  border-radius: 2px 10px 10px 2px;
+  padding: 0.9rem 1.1rem;
+
+  &::before {
+    letter-spacing: 0.1em;
+    font-size: 0.78em;
+  }
+}
+
+p.note, blockquote.note { background: $sumi-000; }
+p.important, blockquote.important { background: $shu-000; }
+p.warning, blockquote.warning { background: $kitsune-000; }
+
+// --- Breadcrumbs, lists ---
+.breadcrumb-nav-list-item {
+  color: $nezumi;
+}
+
+.main-content ol li::before,
+.main-content ul li::before {
+  color: $nezumi;
+}
+
+// --- Footer ---
+.main-content-wrap footer, .site-footer {
+  font-size: 0.8rem !important;
+}
