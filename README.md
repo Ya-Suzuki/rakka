@@ -34,6 +34,16 @@ rakka/
 
 [`examples/auction_house`](examples/auction_house) は、ネットオークションを題材にした Rails アプリです。1出品 = 1アクターでの同時入札、イベント履歴からのタイムトラベル表示、作り直せる読みモデルを、画面とコマンドで確かめられます。
 
+## 必要環境
+
+| | |
+|---|---|
+| Ruby | 4.0 以上（`Ractor::Port` を使う） |
+| データベース | PostgreSQL（`pg` gem）。Ractorから使えないドライバ（`sqlite3`、`mysql2`）には対応しない |
+| Rails（rakka-rails） | 7.0 以上。サンプルアプリは 8.1 で確認 |
+
+テストやデモではメモリ上のEventStoreを使えるので、PostgreSQLは無くても動く。
+
 ## インストール
 
 ```ruby
@@ -141,15 +151,12 @@ puts recovered.balance  # => 700
 
 ```ruby
 Rakka.subscribe(BankAccount::MoneyDeposited) do |event, metadata|
-  puts "Deposited: #{event.amount}"
-
-  # Read Model更新
-  AccountSummary.update_balance(metadata[:actor_id], event.amount)
-
-  # ActionCableでブロードキャスト（Rails）
-  ActionCable.server.broadcast("accounts", { type: "deposit", amount: event.amount })
+  # metadata: { stream_id: "BankAccount-account-123", actor_id: "account-123", version: 3 }
+  puts "#{metadata[:actor_id]} に #{event.amount} 入金"
 end
 ```
+
+ハンドラへの配送は at-most-once で、同じプロセスの中だけで行われる（イベントを書いた直後にプロセスが落ちると、そのイベントはハンドラに届かない）。読みモデルのように取りこぼせない用途では、`metadata[:version]` を使って重複を無視し、欠落をイベントストアから埋める。その実装例が [サンプルアプリの `Projections`](examples/auction_house/app/projections/projections.rb) にある。
 
 ## コンポーネント
 
@@ -271,28 +278,58 @@ account.stop  # 明示的に解放
 
 ### EventBus
 
-イベント発生時にハンドラを呼び出す。非同期コマンドでも動作。
+イベントが永続化された後に、メインRactorのスレッドでハンドラを呼び出す。非同期コマンド（`send_command`）でも呼ばれる。
 
 ```ruby
 Rakka.subscribe(SomeEvent) { |event, metadata| ... }
 Rakka.subscribe_all { |event, metadata| ... }  # 全イベント
+
+# ハンドラの呼び出しを包む（rakka-railsはRailsのexecutorで包んでいる）
+Rakka.event_bus.around_publish { |publish| SomeLock.synchronize { publish.call } }
 ```
+
+- 配送は at-most-once（「基本的な使い方 4」を参照）
+- ハンドラが例外を投げても、警告を出して次のハンドラへ進む
 
 ## 開発
 
+どれもリポジトリ直下から始める。
+
 ```bash
-# 依存関係インストール
-cd rakka-core && bundle install
-
-# テスト実行
-bundle exec rspec
-
-# PostgreSQL起動（Docker）
+# PostgreSQL起動（Docker）。無くてもPostgreSQL以外のテストは動く（該当スペックはスキップ）
 docker compose up -d
 
-# PostgreSQLデモ
-ruby examples/postgres_demo.rb
+# rakka-core
+cd rakka-core
+bundle install
+bundle exec rspec
+
+# rakka-rails（最小のRailsアプリを起動して、Railtieとジェネレータを検証する）
+cd rakka-rails
+bundle install
+bundle exec rspec
+
+# サンプルアプリ
+cd examples/auction_house
+bundle install
+bin/rails db:setup
+bin/rails test
 ```
+
+### デモスクリプト（rakka-core/examples）
+
+`cd rakka-core && ruby examples/<ファイル名>` で実行する。`postgres_demo.rb` 以外はPostgreSQL不要。
+
+| ファイル | 内容 |
+|---|---|
+| `bank_account.rb` | 基本の集約（入金・出金・残高不足の拒否・復元） |
+| `async_demo.rb` | 非同期コマンドとイベントハンドラ |
+| `event_handler_demo.rb` | イベントの種類ごとのハンドラと全イベントのハンドラ |
+| `passivation_demo.rb` | アイドルなアクターの解放と、イベントからの復元 |
+| `supervisor_demo.rb` | アクター単位のクラッシュと、シャードRactorの再起動 |
+| `transfer_demo.rb` | アクター間メッセージング（口座間の送金） |
+| `many_actors_demo.rb` | 多数のアクターを少数のRactorに載せたときのメモリと処理速度（引数でアクター数） |
+| `postgres_demo.rb` | PostgreSQLのEventStore、復元、楽観ロック |
 
 ## アーキテクチャ
 
@@ -333,10 +370,31 @@ rails generate rakka:aggregate Order  # app/aggregates/order.rb
 
 `config/initializers/rakka.rb` の `config.rakka` に書いた設定（`shard_count` / `passivate_after` / `max_actors_per_shard` / `throughput` / `mailbox_capacity` / `snapshot_every` / `rebalance`）がRakka本体に渡る。接続先は `database.yml` から取る。既存のアプリにスナップショット用のテーブルだけ足す場合は `rails rakka:create_schema`（無いテーブルだけ作る）。
 
+```ruby
+# config/initializers/rakka.rb
+Rails.application.config.rakka = {
+  shard_count: 4,
+  snapshot_every: 100
+}
+
+Rakka.subscribe_all { |event, metadata| Projections.apply(event, metadata) }
+```
+
+rakka-railsが自動で行うこと:
+
+- イベントハンドラをRailsのexecutorで包んで呼ぶ（DB接続の返却、コードの再読み込みとの排他）
+- 開発環境でコードを再読み込みする前にActorSystemを止める。次のコマンドで作り直され、アクターはイベントから戻る（止めないと、シャードに残った古いクラスのアクターで最初のコマンドが失敗する）
+
+気をつけること:
+
+- `handle` / `apply_event` はシャードRactorの中で動く。ActiveRecordやグローバルな状態には触れず、引数だけを使う
+- リクエストやテストの中で読みモデルの反映を待つときは、クエリキャッシュに注意する（同じSQLの結果がキャッシュされ、いつまでも変わらないように見える）。`ActiveRecord::Base.uncached` の中で確かめる
 - リバランスが働くのはプロセス内のシャード間だけ（プロセスをまたいだ移動はしない）
 - シャードRactorはプロセスごとに持つ。Pumaのクラスタモードでは各ワーカーが独立したActorSystemになる
 - ワーカーをまたいだ同時書き込みは楽観ロックで検出・再試行されるので整合性は保たれる（メモリ上のアクターは「単一ライターの保証」ではなく「状態キャッシュ + プロセス内の直列化」）
 - PostgreSQLのコネクション数は、プロセスあたり `shard_count + 1`
+
+実際に動くアプリは [`examples/auction_house`](examples/auction_house) を参照。
 
 ## Ractor制約
 
@@ -347,4 +405,4 @@ rails generate rakka:aggregate Order  # app/aggregates/order.rb
 
 ## ライセンス
 
-MIT
+MIT（[LICENSE](LICENSE)）

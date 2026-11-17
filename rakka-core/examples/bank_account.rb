@@ -15,12 +15,12 @@ class BankAccount < Rakka::PersistentActor
     { balance: 0 }
   end
 
-  def deposit(cmd)
-    send_command_sync(cmd)
+  def deposit(amount)
+    send_command_sync(Deposit[amount])
   end
 
-  def withdraw(cmd)
-    send_command_sync(cmd)
+  def withdraw(amount)
+    send_command_sync(Withdraw[amount])
   end
 
   def balance
@@ -65,15 +65,15 @@ if __FILE__ == $0
   puts "Initial balance: #{account.balance}"
 
   # 入金
-  account.deposit(BankAccount::Deposit[1000])
+  account.deposit(1000)
   puts "After deposit: #{account.balance}"
 
   # 出金
-  account.withdraw(BankAccount::Withdraw[300])
+  account.withdraw(300)
   puts "After withdraw: #{account.balance}"
 
   # 残高不足（拒否される）
-  account.withdraw(BankAccount::Withdraw[1000])
+  account.withdraw(1000)
   puts "After rejected withdraw: #{account.balance}"
 
   puts "\n--- Recovery test ---"

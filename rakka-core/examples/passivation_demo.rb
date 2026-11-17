@@ -11,9 +11,9 @@ end
 puts "=== Passivation Demo ==="
 
 account1 = BankAccount.new("account-1")
-account1.deposit(BankAccount::Deposit[1000])
+account1.deposit(1000)
 account2 = BankAccount.new("account-2")
-account2.deposit(BankAccount::Deposit[2000])
+account2.deposit(2000)
 
 puts "Active actors: #{Rakka.system.stats[:active_count]}"
 

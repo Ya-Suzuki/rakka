@@ -24,16 +24,16 @@ accounts = 5.times.map { BankAccount.new("account-#{SecureRandom.hex(4)}") }
 
 puts "\n--- Shard distribution ---"
 accounts.each_with_index do |account, i|
-  account.deposit(BankAccount::Deposit[1000 * (i + 1)])
+  account.deposit(1000 * (i + 1))
   puts "Account #{i}: balance=#{account.balance} shard=#{Rakka.system.shard_index(account.stream_id)}"
 end
 puts "Actors per shard: #{Rakka.system.stats[:shards].map { |s| s[:active_count] }.inspect}"
 
 puts "\n--- Single account test ---"
 account = accounts.first
-account.withdraw(BankAccount::Withdraw[300])
+account.withdraw(300)
 puts "After withdraw(300): #{account.balance}"
-puts "Withdraw(10000) result: #{account.withdraw(BankAccount::Withdraw[10_000]).inspect}"
+puts "Withdraw(10000) result: #{account.withdraw(10_000).inspect}"
 
 puts "\n--- Recovery test ---"
 account.stop # メモリから解放 → 次のアクセスでPostgreSQLから復元
@@ -43,7 +43,7 @@ puts "\n--- Optimistic concurrency test ---"
 # 別プロセスのライターを模して、アクターを通さずに直接書く
 event_store.append(account.stream_id, BankAccount::MoneyWithdrawn[700])
 # アクターのキャッシュは古いが、競合を検知して最新状態(0)で判定し直す
-puts "Withdraw(100) after external write: #{account.withdraw(BankAccount::Withdraw[100]).inspect}"
+puts "Withdraw(100) after external write: #{account.withdraw(100).inspect}"
 puts "Balance: #{account.balance}"
 
 Rakka.shutdown

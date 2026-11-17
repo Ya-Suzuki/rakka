@@ -26,13 +26,13 @@ end
 account = BankAccount.new("account-1")
 
 puts "\n--- Deposit ---"
-account.deposit(BankAccount::Deposit[1000])
+account.deposit(1000)
 
 puts "\n--- Withdraw ---"
-account.withdraw(BankAccount::Withdraw[300])
+account.withdraw(300)
 
 puts "\n--- Rejected (no handler called) ---"
-result = account.withdraw(BankAccount::Withdraw[10000])
+result = account.withdraw(10000)
 puts "Result: #{result.inspect}"
 
 puts "\nFinal balance: #{account.balance}"
