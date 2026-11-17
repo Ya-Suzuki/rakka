@@ -6,7 +6,7 @@ require_relative "../support/test_actors"
 
 RSpec.describe "Rakka::ActorSystem rebalancing" do
   let(:event_store) { Rakka::EventStore::Memory.new }
-  let(:options) { { rebalance_interval: nil } }
+  let(:options) { { rebalance: false } }
   let(:system) { Rakka::ActorSystem.new(event_store: event_store, shard_count: 2, **options) }
 
   after do
@@ -109,18 +109,38 @@ RSpec.describe "Rakka::ActorSystem rebalancing" do
   end
 
   describe "automatic rebalancing" do
-    let(:options) { { rebalance_interval: 0.02, rebalance_threshold: 4 } }
+    let(:options) { {} }
 
     it "moves backlogged actors from a busy shard to an idle one" do
-      ids = ids_on(0, 6)
-      ids.each { |id| (1..10).each { |i| counter(id).slow_increment_async(i, 0.01) } }
+      ids = ids_on(0, 8)
+      ids.each { |id| (1..15).each { |i| counter(id).slow_increment_async(i, 0.01) } }
 
-      eventually { ids.all? { |id| event_store.stream_size(stream(id)) == 10 } }
+      eventually { ids.all? { |id| event_store.stream_size(stream(id)) == 15 } }
 
       stats = system.stats
       expect(stats[:migrations]).to be > 0
       expect(stats[:shards][1][:processed]).to be > 0
-      ids.each { |id| expect(amounts(id)).to eq((1..10).to_a) } # 移動しても順序は保たれる
+      ids.each { |id| expect(amounts(id)).to eq((1..15).to_a) } # 移動しても順序は保たれる
+    end
+
+    it "finishes sooner than a single shard could" do
+      ids = ids_on(0, 8)
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      ids.each { |id| 15.times { counter(id).slow_increment_async(1, 0.01) } }
+      eventually { ids.all? { |id| event_store.stream_size(stream(id)) == 15 } }
+      elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+
+      expect(elapsed).to be < 1.0 # 1シャードで順に処理すると 120件 × 10ms = 1.2秒
+    end
+
+    it "does not move actors when the backlog is too short to be worth it" do
+      ids = ids_on(0, 8)
+      ids.each { |id| counter(id).increment_async } # すぐ終わる処理が1件ずつ
+
+      eventually { ids.all? { |id| event_store.stream_size(stream(id)) == 1 } }
+      sleep 0.1
+
+      expect(system.stats).to include(migrations: 0)
     end
 
     it "leaves a single hot actor where it is" do

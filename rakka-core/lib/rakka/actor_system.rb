@@ -11,24 +11,33 @@ module Rakka
   #
   # アクターの置き場所は crc32(stream_id) で決まる「ホーム」が基本だが、あるシャードに
   # メッセージが溜まると、溜まっているアクターを空いているシャードへ移す（リバランス）。
+  #
+  # リバランスに調整用の設定は無い。各シャードが実測した「メッセージ1件の処理時間」と
+  # 「アクター1つの復元時間」を使い、ワークスティーリングと同じ考え方で決める:
+  # 手が空くシャードがあり、そこへ移したほうがそのアクターの処理が早く終わる場合に
+  # だけ移す。全シャードが忙しいときは移しても得が無いので何もしない。
+  # 調べる間隔も、偏りがある間は短く、無ければ長くなる。
   class ActorSystem
+    # 負荷を調べる間隔（秒）の範囲。偏りがある間は最短で、無ければ倍々で延ばす
+    REBALANCE_INTERVAL = (0.01..0.5)
+    # アクター1つを移すのにかかる固定の手間（秒）の見積もり。復元時間に足して使う
+    HANDOFF_OVERHEAD = 0.001
+
     # ホーム以外に置いているアクターの数の上限。超えたら古いものからホームに戻す
     MAX_ROUTES = 10_000
 
     attr_reader :event_store, :shard_count
 
     # snapshot_every: 何イベントごとに状態のスナップショットを保存するか。nil で保存しない
-    # rebalance_interval: 負荷の偏りを調べる間隔（秒）。nil でリバランスしない
-    # rebalance_threshold: シャード間の未処理メッセージ数の差がこれ以上なら移す
+    # rebalance: false でリバランスしない
     def initialize(event_store:, shard_count: Etc.nprocessors, passivate_after: 300,
                    max_actors_per_shard: 10_000, throughput: 5, mailbox_capacity: nil,
                    snapshot_every: 100,
-                   rebalance_interval: 1, rebalance_threshold: 50,
+                   rebalance: true,
                    max_restarts: 3, within: 60,
                    publisher_port: Rakka.publisher_port)
       @event_store = event_store
       @shard_count = shard_count
-      @rebalance_threshold = rebalance_threshold
 
       # ルーティングに関わる状態はすべてこのロックで守る。「送り先を調べて送る」を
       # ロックの中で行うので、アクターの移動と送信の順序が入れ替わらない
@@ -64,7 +73,7 @@ module Rakka
       @running = true
       @stop_signal = Thread::Queue.new
       @timers = [every([[passivate_after / 2.0, 5].min, 0.05].max) { tick }]
-      @timers << every(rebalance_interval) { rebalance } if rebalance_interval && shard_count > 1
+      @timers << start_rebalancer if rebalance && shard_count > 1
     end
 
     # コマンドを送って結果を待つ
@@ -316,29 +325,66 @@ module Rakka
       end
     end
 
-    # 最も溜まっているシャードから最も空いているシャードへ、差が縮まる分だけ移す
+    def start_rebalancer
+      Thread.new do
+        interval = REBALANCE_INTERVAL.min
+
+        loop do
+          @stop_signal.pop(timeout: interval)
+          break if @stop_signal.closed?
+
+          imbalanced = begin
+            rebalance
+          rescue Error
+            false
+          end
+          interval = imbalanced ? REBALANCE_INTERVAL.min : [interval * 2, REBALANCE_INTERVAL.max].min
+        end
+      end
+    end
+
+    # 最も溜まっているシャードから最も空いているシャードへアクターを移す。
+    # 溜まり具合は件数ではなく「捌き切るまでの見込み時間」（未処理数 × 1件の処理時間）で比べる。
+    # 移す価値のある偏りが残っていれば true を返す（次もすぐ調べる）
     def rebalance
       loads = shard_count.times.filter_map do |index|
         [index, call_shard(index) { |port| [:load, port] }]
       rescue ShardUnavailable
         nil
       end
-      return if loads.size < 2
+      send_home_oldest
 
-      _, busiest = loads.max_by { |_, load| load[:queued] }
-      idlest, idle = loads.min_by { |_, load| load[:queued] }
-      gap = busiest[:queued] - idle[:queued]
+      measured = loads.filter_map { |_, load| load[:service_time] }
+      return false if loads.size < 2 || measured.empty?
+
+      # まだ1件も処理していないシャードは、他のシャードの平均で見積もる
+      typical = measured.sum / measured.size
+      drain_time = ->(load) { load[:queued] * (load[:service_time] || typical) }
+
+      _, busiest = loads.max_by { |_, load| drain_time.call(load) }
+      idlest, idle = loads.min_by { |_, load| drain_time.call(load) }
+      gap = drain_time.call(busiest) - drain_time.call(idle)
+      per_message = busiest[:service_time] || typical
+      cost = HANDOFF_OVERHEAD + (idle[:activation_time] || busiest[:activation_time] || 0)
+      return false unless gap > cost
+
+      # 移動が済む頃にも手が空いていないシャードには移さない。どのシャードも忙しいときに
+      # 移すと、移動の手間のぶんだけ全体が遅くなる
+      return true unless drain_time.call(idle) <= cost
 
       busiest[:backlog].sort_by { |_, size| -size }.each do |stream_id, size|
-        break if gap < @rebalance_threshold
-        next if size >= gap # 移しても偏りが逆向きになるだけ（1つのアクターに集中している等）
+        time = size * per_message
+        # 移した先で「自分の分 + 移動の手間」をかけても、今のシャードで待つより早く
+        # 終わるときだけ移す。1つのアクターに集中している場合は gap ≒ time なので動かない
+        next unless gap - time > cost && migrate(stream_id, idlest)
 
-        gap -= 2 * size if migrate(stream_id, idlest)
+        gap -= 2 * time
       end
 
-      send_home_oldest
+      true
     end
 
+    # 移動済みアクターの表が大きくなりすぎないよう、古いものからホームに戻す
     def send_home_oldest
       loop do
         stream_id = @lock.synchronize { @routes.first&.first if @routes.size > MAX_ROUTES }

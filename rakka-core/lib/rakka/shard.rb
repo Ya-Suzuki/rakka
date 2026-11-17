@@ -22,7 +22,7 @@ module Rakka
   #   シャード宛て（すぐ処理される）
   #   [:tick]              アイドルなアクターの掃除
   #   [:stats, reply_port]
-  #   [:load, reply_port]  リバランス用: 未処理数と、溜まっているアクターの一覧
+  #   [:load, reply_port]  リバランス用: 未処理数、実測した処理時間、溜まっているアクターの一覧
   #
   #   アクターの移動（ActorSystem#migrate を参照）
   #   [:expect, stream_id]                 これから引き継ぐ。届くまでこのアクター宛ては保留
@@ -35,6 +35,9 @@ module Rakka
 
     # リバランスの判断材料として報告するアクター数の上限
     LOAD_SAMPLE = 64
+
+    # 実測値の移動平均で、新しい計測に掛ける重み
+    SMOOTHING = 0.2
 
     # 自分宛てに送る目印。これを受け取るまでに届いていた分は振り分け済みと分かる
     DRAINED = :__rakka_drained__
@@ -100,6 +103,9 @@ module Rakka
       @mailboxes = {}
       @queued = 0
       @dropped = 0
+      # リバランスの判断材料にする実測値（秒、移動平均）。まだ測れていなければ nil
+      @service_time = nil    # メッセージ1件の処理
+      @activation_time = nil # アクター1つの復元
       # 引き継ぎ待ちのアクター: stream_id => 保留中のメッセージ
       @parked = {}
       @stopping = false
@@ -142,13 +148,14 @@ module Rakka
       in [:adopt, stream_id, backlog]
         adopt(stream_id, backlog)
       in [:load, reply]
-        respond(reply, { queued: @queued,
+        respond(reply, { queued: @queued, service_time: @service_time, activation_time: @activation_time,
                          backlog: @mailboxes.first(LOAD_SAMPLE).map { |id, mailbox| [id, mailbox.size] } })
       in [:tick]
         passivate_idle
       in [:stats, reply]
         respond(reply, { index: @index, active_count: @actors.size, queued: @queued,
-                         processed: @processed, crashes: @crashes, dropped: @dropped })
+                         processed: @processed, crashes: @crashes, dropped: @dropped,
+                         service_time: @service_time, activation_time: @activation_time })
       in [:stop]
         @stopping = true
       end
@@ -215,6 +222,7 @@ module Rakka
 
       mailbox.shift(@throughput).each do |message|
         @queued -= 1
+        started = now
 
         case message
         in [:command, actor_class, id, _, command, reply]
@@ -225,9 +233,15 @@ module Rakka
           @actors.delete(stream_id)
           respond(reply, :ok)
         end
+
+        @service_time = smooth(@service_time, now - started)
       end
 
       @mailboxes[stream_id] = mailbox unless mailbox.empty?
+    end
+
+    def smooth(average, sample)
+      average ? average + SMOOTHING * (sample - average) : sample
     end
 
     def on_command(actor_class, id, stream_id, command, reply)
@@ -314,11 +328,13 @@ module Rakka
       entry = @actors.delete(stream_id)
 
       unless entry
+        started = now
         behavior = actor_class.behavior(id)
         state, snapshot_at = load_snapshot(actor_class, stream_id) || [behavior.initial_state, 0]
         events = @journal.read(stream_id, snapshot_at)
         state = events.reduce(state) { |s, event| behavior.apply_event(event, s) }
         entry = Entry.new(behavior, state, snapshot_at + events.size, nil, snapshot_at)
+        @activation_time = smooth(@activation_time, now - started)
 
         @actors.shift while @actors.size >= @max_actors
       end
