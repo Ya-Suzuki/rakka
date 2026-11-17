@@ -16,10 +16,16 @@ module Rakka
         ::ActiveRecord::Generators::Base.next_migration_number(dirname)
       end
 
-      def create_migration
+      # create_migration という名前にすると、migration_template が内部で呼ぶ
+      # Rails::Generators::Migration#create_migration を上書きしてしまう
+      def create_migration_files
         migration_template(
           "create_rakka_events.rb.erb",
           "db/migrate/create_rakka_events.rb"
+        )
+        migration_template(
+          "create_rakka_snapshots.rb.erb",
+          "db/migrate/create_rakka_snapshots.rb"
         )
       end
 

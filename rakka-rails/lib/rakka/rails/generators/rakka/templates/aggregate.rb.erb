@@ -12,21 +12,19 @@ class <%= class_name %> < Rakka::PersistentActor
   end
 
   def handle(command, state)
-    case command
+    # case command
     # in DoSomething(param:)
     #   [:persist, SomethingDone[param]]
-    else
-      [:noop]
-    end
+    # end
+    [:noop]
   end
 
   def apply_event(event, state)
-    case event
+    # case event
     # in SomethingDone(param:)
     #   state.merge(key: param)
-    else
-      state
-    end
+    # end
+    state
   end
 
   # Public interface

@@ -13,6 +13,22 @@ Rails.application.config.rakka = {
   # Max actors kept in memory per shard, evicted LRU (default: 10_000)
   # max_actors_per_shard: 10_000,
 
+  # Messages one actor handles in a row before the shard moves on to the
+  # next actor with mail (default: 5)
+  # throughput: 5,
+
+  # Max messages queued per actor; beyond this, senders get Rakka::MailboxFull
+  # (default: unlimited)
+  # mailbox_capacity: 1_000,
+
+  # Save a state snapshot every N events so recovery replays fewer events
+  # (default: 100, false to disable)
+  # snapshot_every: 100,
+
+  # Move backlogged actors to shards with spare capacity. Self-tuning; set to
+  # false to keep every actor on the shard its id hashes to (default: true)
+  # rebalance: true,
+
   # Database configuration to use (from database.yml)
   database_config_name: :primary,
 
