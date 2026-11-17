@@ -1,6 +1,7 @@
 /*
- * 落花: 花びらが散り続けて画面の下に積もる。フッターの一言を押すと、全部が
- * 巻き戻ってから同じように散り直し、同じ場所に積もる。
+ * 落花: 花びらが散り続けて、ページの底（フッターの下）に積もる。途中を読んでいる
+ * 間は画面の下を通り抜けて見えなくなり、最後までスクロールすると山が見える。
+ * フッターの一言を押すと、全部が巻き戻ってから同じように散り直し、同じ場所に積もる。
  *
  * 花びらの動きは「生まれた時刻と乱数から決まる値（イベント）」と「経過時間」だけで
  * 決まる純粋な関数（place）なので、巻き戻しも再生も、時間を動かすだけでできる。
@@ -27,7 +28,7 @@
 
   var BINS = 72;          // 積もる位置の区切り（画面幅によらず一定。幅を変えても同じ山になる）
   var LAYER = 3.2;        // 1枚積もるごとに山が高くなる量（px）
-  var HEAP_MAX = 64;      // 山の高さの上限（px）
+  var HEAP_MAX = 40;      // 山の高さの上限（px）
   var PILE_MAX = 180;     // 積もらせる枚数の上限。超えたら画面の外へ落ちて消える
   var REWIND = 2.4;       // 巻き戻しにかける秒数（全体）
   var LIFT = 1.1;         // 一枚が舞い上がるのにかける秒数。最後に散ったものから順に、ずらして上がる
@@ -40,6 +41,7 @@
   }
 
   var W = 0, H = 0, dpr = 1;
+  var docH = 0, scrollY = 0; // 山はページの底にあるので、描くたびに画面上の位置へ直す
   var clock = 0;          // ページが見えている間だけ進む時計（秒）
   var petals = [];        // 散った花びら（イベントの列）
   var heap = [];          // 区切りごとの山の高さ
@@ -88,17 +90,21 @@
 
   function ease(q) { return q < 0.5 ? 4 * q * q * q : 1 - Math.pow(-2 * q + 2, 3) / 2; }
 
-  // --- 状態: 経過時間 t の花びらの位置（純粋な関数） ---
+  // --- 状態: 経過時間 t の花びらの位置（イベントと経過時間から決まる純粋な関数） ---
+  // 花びらは画面の上から下へ抜けるように落ちる。ページの底の山が画面に見えていれば、
+  // その上で止まる。見えていなければ画面の外へ抜け、底に積もったことになる
   function place(p, t) {
     var q = Math.max(0, Math.min(1, t / p.dur));
-    var restY = p.piled ? H - 8 - p.lift : H + 80;
-    var settle = Math.pow(q, 4);
+    var fallY = -60 + (H + 120) * q;
+    var restY = p.piled ? docH - 10 - p.lift - scrollY : Infinity;
+    var near = Math.max(0, Math.min(1, (restY - fallY) / 140));
+    var settle = Math.max(Math.pow(q, 4), 1 - near); // 山に近づくほど揺れが収まる
     return {
-      x: (p.x + p.drift * q) * W + p.swayAmp * Math.sin(p.swayF * t + p.phase) * (1 - settle),
-      y: -60 + (restY + 60) * q,
-      rot: (p.restRot + p.spin * (p.dur - Math.min(t, p.dur)) / 10) * Math.PI / 180,
+      x: (p.x + p.drift * Math.max(q, 1 - near)) * W + p.swayAmp * Math.sin(p.swayF * t + p.phase) * (1 - settle),
+      y: Math.min(fallY, restY),
+      rot: (p.restRot + p.spin * (p.dur - Math.min(t, p.dur)) * (1 - settle) / 10) * Math.PI / 180,
       flip: Math.cos(p.flipF * t) * (1 - settle) + p.restFlip * settle,
-      settled: q >= 1,
+      settled: p.piled && fallY >= restY,
       visible: t >= 0
     };
   }
@@ -114,7 +120,7 @@
   }
 
   function draw(p, s) {
-    if (!s.visible) return;
+    if (!s.visible || s.y > H + 60 || s.y < -80) return;
     var k = 0.62 * p.scale;
     ctx.setTransform(dpr * k * Math.max(0.08, Math.abs(s.flip)), 0, 0, dpr * k, s.x * dpr, s.y * dpr);
     ctx.rotate(s.rot);
@@ -130,6 +136,8 @@
   }
 
   function frame() {
+    docH = document.documentElement.scrollHeight;
+    scrollY = window.scrollY || window.pageYOffset || 0;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -243,7 +251,8 @@
   window.__rakkaPetals = {
     advance: function (seconds) { for (var s = 0; s < seconds; s += 0.05) { clock += 0.05; frame(); } },
     state: function () { return { mode: mode, count: petals.length, piled: countPiled(),
-      rests: petals.filter(function (p) { return p.piled; }).map(function (p) { var s = place(p, p.dur); return [Math.round(s.x), Math.round(s.y)]; }) }; },
+      // 山の位置はページ上の座標で返す（スクロール位置によらない）
+      rests: petals.filter(function (p) { return p.piled; }).map(function (p) { var s = place(p, p.dur); return [Math.round(s.x), Math.round(s.y + scrollY)]; }) }; },
     rewind: rewind
   };
 })();

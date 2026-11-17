@@ -513,3 +513,7 @@ html[lang="ja"] .lead, html[lang="ja"] p, html[lang="ja"] li, html[lang="ja"] .p
 .footer__poem[role="button"]:hover,
 .is-replaying .footer__poem { color: var(--shu); }
 .footer__poem[role="button"]:focus-visible { outline: 1px solid var(--shu); outline-offset: 6px; }
+
+/* 花びらはフッターの下に積もるので、文字が埋もれないよう下を空けておく */
+.footer { padding-bottom: 104px; }
+@media (max-width: 640px) { .footer { padding-bottom: 88px; } }
