@@ -17,10 +17,12 @@ module Rakka
 
     attr_reader :event_store, :shard_count
 
+    # snapshot_every: 何イベントごとに状態のスナップショットを保存するか。nil で保存しない
     # rebalance_interval: 負荷の偏りを調べる間隔（秒）。nil でリバランスしない
     # rebalance_threshold: シャード間の未処理メッセージ数の差がこれ以上なら移す
     def initialize(event_store:, shard_count: Etc.nprocessors, passivate_after: 300,
                    max_actors_per_shard: 10_000, throughput: 5, mailbox_capacity: nil,
+                   snapshot_every: 100,
                    rebalance_interval: 1, rebalance_threshold: 50,
                    max_restarts: 3, within: 60,
                    publisher_port: Rakka.publisher_port)
@@ -54,7 +56,8 @@ module Rakka
         @supervisor.supervise(index) do
           Shard.spawn(index, connector, publisher_port, router_port,
                       passivate_after: passivate_after, max_actors: max_actors_per_shard,
-                      throughput: throughput, mailbox_capacity: mailbox_capacity)
+                      throughput: throughput, mailbox_capacity: mailbox_capacity,
+                      snapshot_every: snapshot_every)
         end
       end
 

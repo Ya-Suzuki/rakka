@@ -31,6 +31,9 @@ module Rakka
     #     （nil ならチェックなしで末尾に追記）
     #   read(stream_id, from_version = 0) => events
     #   size(stream_id) => version
+    #   save_snapshot(stream_id, schema, version, state)
+    #     version時点のstateを保存する（ストリームごとに最新の1つだけ持つ）
+    #   load_snapshot(stream_id) => [schema, version, state] | nil
     #   close
     #
     # version はストリーム内のイベント数（= 次に書く position）。
@@ -53,6 +56,15 @@ module Rakka
 
       def stream_size(stream_id)
         journal { |j| j.size(stream_id) }
+      end
+
+      def save_snapshot(stream_id, version, state, schema: 1)
+        journal { |j| j.save_snapshot(stream_id, schema, version, state) }
+      end
+
+      # => [schema, version, state] | nil
+      def snapshot(stream_id)
+        journal { |j| j.load_snapshot(stream_id) }
       end
 
       private

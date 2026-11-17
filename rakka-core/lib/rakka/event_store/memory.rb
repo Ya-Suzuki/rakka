@@ -35,6 +35,14 @@ module Rakka
           call(:size, stream_id)
         end
 
+        def save_snapshot(stream_id, schema, version, state)
+          call(:save_snapshot, stream_id, schema, version, state)
+        end
+
+        def load_snapshot(stream_id)
+          call(:load_snapshot, stream_id)
+        end
+
         def close; end
 
         private
@@ -55,6 +63,7 @@ module Rakka
 
         ractor = Ractor.new do
           streams = Hash.new { |h, k| h[k] = [] }
+          snapshots = {}
 
           loop do
             case Ractor.receive
@@ -73,6 +82,14 @@ module Rakka
 
             in [:size, stream_id, reply]
               reply.send(streams.fetch(stream_id, []).size)
+
+            in [:save_snapshot, stream_id, schema, version, state, reply]
+              current = snapshots[stream_id]
+              snapshots[stream_id] = [schema, version, state] if !current || current[1] <= version
+              reply.send(:ok)
+
+            in [:load_snapshot, stream_id, reply]
+              reply.send(snapshots[stream_id])
 
             in [:stop]
               break

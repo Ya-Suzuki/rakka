@@ -27,6 +27,34 @@ module Rakka
         "#{name}-#{id}"
       end
 
+      # このクラスのスナップショット間隔（イベント数）を決める。nil / false で無効。
+      # 指定しなければシステムの設定（snapshot_every）に従う
+      #
+      #   class Ledger < Rakka::PersistentActor
+      #     snapshot_every 500
+      #   end
+      def snapshot_every(events)
+        @snapshot_interval = events || false
+      end
+
+      # state の形や apply_event の意味を変えたら番号を上げる。番号の違う
+      # 古いスナップショットは使われず、イベントの再生で作り直される
+      def snapshot_schema(version)
+        @snapshot_schema = version
+      end
+
+      def snapshot_interval(default)
+        return @snapshot_interval || nil if instance_variable_defined?(:@snapshot_interval)
+
+        superclass.respond_to?(:snapshot_interval) ? superclass.snapshot_interval(default) : default
+      end
+
+      def snapshot_schema_version
+        return @snapshot_schema if instance_variable_defined?(:@snapshot_schema)
+
+        superclass.respond_to?(:snapshot_schema_version) ? superclass.snapshot_schema_version : 1
+      end
+
       # シャードRactor内で handle / apply_event を呼ぶためのインスタンスを作る
       def behavior(id)
         allocate.tap { |actor| actor.instance_variable_set(:@id, id) }

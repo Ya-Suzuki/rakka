@@ -16,6 +16,7 @@ Akkaにインスパイアされた設計で、少数のRactor上に多数の軽�
 - **Event Sourcing**: イベントを永続化し、状態を再構築可能
 - **Actor Model**: メッセージパッシングによる安全な並行処理
 - **楽観ロック**: 複数プロセスから同じ集約に書いても整合する
+- **スナップショット**: 一定イベントごとに状態を保存し、復元を速くする
 - **Passivation**: アイドル時・上限超過時にActorを自動解放してメモリ節約
 - **Let it crash**: アクターの例外は状態を捨てて復元、シャードRactorの異常終了は自動リスタート
 - **EventBus**: 非同期イベントハンドリング
@@ -113,6 +114,7 @@ Rakka.configure do |c|
   c.max_actors_per_shard = 10_000  # 1シャードがメモリに保持する上限（LRU）
   c.throughput = 5                 # 1アクターを続けて処理するメッセージ数
   c.mailbox_capacity = 1_000       # 1アクターに溜められるメッセージ数（デフォルト: 無制限）
+  c.snapshot_every = 100           # 何イベントごとにスナップショットを保存するか。false で無効
   c.rebalance_interval = 1         # 負荷の偏りを調べる間隔（秒）。false で無効
   c.rebalance_threshold = 50       # シャード間の未処理数の差がこれ以上なら移す
 end
@@ -189,7 +191,7 @@ account = BankAccount.new("account-123", system: system)
 ハッシュでの割り当ては、アクターが多ければ均等になるが、忙しいアクターがたまたま同じシャードに集まると、そのシャードだけが詰まって他のコアが空く。ActorSystemは定期的に各シャードの未処理メッセージ数を比べ、差が `rebalance_threshold` 以上なら、溜まっているアクターをメールボックスごと空いているシャードへ移す。
 
 - 移動中もアクターごとのメッセージ順序は保たれる
-- 状態は運ばず、移動先がイベントから復元する（イベント数の多いアクターほど移動のコストが高い）
+- 状態は運ばず、移動先がスナップショットとイベントから復元する
 - 1つのアクターにだけ負荷が集中している場合は移さない（1アクターは1シャードでしか処理できない）
 
 ```ruby
@@ -225,6 +227,21 @@ end
 |-------|------|------|
 | `Memory` | テスト | Ractor内のHashに保存 |
 | `Postgres` | 本番 | シャードごとに1コネクション、`UNIQUE(stream_id, position)` で競合検出 |
+
+### スナップショット
+
+イベントが増えると、復元（Passivation後、再起動後、リバランス後）のたびに全イベントを再生するのが重くなる。Rakkaは `snapshot_every` イベントごとにアクターの状態を保存し、復元時はそこから後のイベントだけを再生する。
+
+```ruby
+class Ledger < Rakka::PersistentActor
+  snapshot_every 500    # このクラスだけ間隔を変える（nil で無効）
+  snapshot_schema 2     # state の形や apply_event の意味を変えたら上げる
+end
+```
+
+- スナップショットはストリームごとに最新の1つだけ。イベントは消さない
+- `snapshot_schema` の番号が違う古いスナップショットは使われず、イベントの再生で作り直される
+- PostgreSQLでは `rakka_snapshots` テーブルに保存する（`Postgres.create_schema` が作成）。state は Marshal で保存するので、Marshal できるオブジェクトであること
 
 ### Passivation
 

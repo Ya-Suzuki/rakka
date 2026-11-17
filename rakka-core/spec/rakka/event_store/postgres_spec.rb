@@ -36,6 +36,37 @@ RSpec.describe "Rakka::EventStore::Postgres" do
     expect(store.stream_size(stream_id)).to eq(1)
   end
 
+  describe "snapshots" do
+    it "round-trips the state as Ruby objects" do
+      state = { count: 3, last: Counter::Incremented[2], tags: %i[a b] }
+      store.save_snapshot(stream_id, 3, state)
+
+      expect(store.snapshot(stream_id)).to eq([1, 3, state])
+      expect(store.snapshot("Counter-missing-#{id}")).to be_nil
+    end
+
+    it "does not replace a snapshot with an older one" do
+      store.save_snapshot(stream_id, 10, { count: 10 })
+      store.save_snapshot(stream_id, 5, { count: 5 })
+
+      expect(store.snapshot(stream_id)).to eq([1, 10, { count: 10 }])
+    end
+
+    it "restores an actor from the snapshot" do
+      system = Rakka::ActorSystem.new(event_store: store, shard_count: 1, snapshot_every: 3)
+      actor = Counter.new(id, system: system)
+      4.times { actor.increment(1) }
+      expect(store.snapshot(stream_id)).to eq([1, 3, { count: 3 }])
+
+      store.save_snapshot(stream_id, 3, { count: 1000 })
+      actor.stop
+
+      expect(actor.count).to eq(1001)
+    ensure
+      system&.stop
+    end
+  end
+
   it "keeps a stream consistent when two systems write to it concurrently" do
     # 2つのActorSystem = 同じストリームを別々にキャッシュする2つのプロセス（Pumaワーカー）相当
     limit = LimitedCounter::LIMIT

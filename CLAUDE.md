@@ -54,7 +54,7 @@ BankAccount.new(id).deposit(...)          # ハンドル（Main Ractor）
 Shard (Ractor)                            # stream_idごとに固定のシャード
     ↓ dispatch: 宛先アクターのメールボックスに入れる
     ↓ メッセージを持つアクターを順番に throughput 件ずつ処理
-    ↓ activate: メモリに無ければ journal.read でイベントを再生
+    ↓ activate: メモリに無ければ スナップショット + それ以降のイベントから復元
     ↓ handle(cmd, state) → [:persist, event]
     ↓ journal.append(stream_id, expected_version, events)   # 楽観ロック
     ↓ apply_event(event, state) → 新しい状態
@@ -100,6 +100,14 @@ EventBus (Main Thread) → subscribers
 - `journal.append(stream_id, expected_version, events)` はバージョンが食い違うと `ConcurrencyError`
 - version = ストリーム内のイベント数。PostgreSQLでは `UNIQUE(stream_id, position)` が競合を検出する
 - 競合時、シャードはキャッシュした状態を捨て、読み直してコマンドを判定し直す（複数プロセスから書いても整合する）
+
+### スナップショット
+
+- `snapshot_every`（デフォルト100）イベントごとに、シャードが `journal.save_snapshot(stream_id, schema, version, state)` で状態を保存する。ストリームごとに最新の1つだけ持つ
+- 復元は「スナップショットの state」から始め、`journal.read(stream_id, snapshot_version)` で以降のイベントだけ再生する
+- クラスごとの指定: `snapshot_every 500` / `snapshot_every nil`（無効）。`snapshot_schema 2` で番号を上げると、古い番号のスナップショットは無視される（state の形や `apply_event` の意味を変えたときに上げる）
+- スナップショットは消しても壊れても困らないキャッシュ。保存の失敗は警告だけ、読めないものは無いものとして扱う
+- PostgreSQLでは `rakka_snapshots` テーブルに Marshal で保存する（JSONだとキーの型やDataが戻らないため）
 
 ### 障害処理（2層）
 
@@ -188,3 +196,4 @@ bundle exec rspec spec/rakka/persistent_actor_spec.rb:42
 - Ruby 4.0+ が必要（Ractor::Port API）
 - PostgreSQL使用時は `pg` gem のみサポート（Ractor safe）
 - Actorの状態はイベントから再構築されるため、イベントは不変であること
+- `apply_event` の結果が変わる変更をしたら `snapshot_schema` を上げること（上げないと古い状態のスナップショットから復元される）

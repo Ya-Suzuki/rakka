@@ -74,6 +74,19 @@ class Counter < Rakka::PersistentActor
   end
 end
 
+# クラスごとのスナップショット設定の確認用
+class FrequentCounter < Counter
+  snapshot_every 2
+end
+
+class NoSnapshotCounter < Counter
+  snapshot_every nil
+end
+
+class MigratedCounter < Counter
+  snapshot_schema 2
+end
+
 # 上限つきカウンタ。競合時にコマンドが最新状態で判定し直されることの確認用
 class LimitedCounter < Rakka::PersistentActor
   Increment = Data.define(:amount)
