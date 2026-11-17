@@ -21,13 +21,13 @@ RSpec.describe Rakka::PersistentActor do
 
     describe "#deposit" do
       it "increases balance" do
-        account.deposit(BankAccount::Deposit[500])
+        account.deposit(500)
 
         expect(account.balance).to eq(500)
       end
 
       it "persists event" do
-        account.deposit(BankAccount::Deposit[500])
+        account.deposit(500)
 
         events = event_store.read_stream("BankAccount-test-account")
         expect(events.size).to eq(1)
@@ -36,16 +36,16 @@ RSpec.describe Rakka::PersistentActor do
     end
 
     describe "#withdraw" do
-      before { account.deposit(BankAccount::Deposit[1000]) }
+      before { account.deposit(1000) }
 
       it "decreases balance" do
-        account.withdraw(BankAccount::Withdraw[300])
+        account.withdraw(300)
 
         expect(account.balance).to eq(700)
       end
 
       it "rejects when insufficient funds" do
-        result = account.withdraw(BankAccount::Withdraw[2000])
+        result = account.withdraw(2000)
 
         expect(result).to eq([:rejected, :insufficient_funds])
         expect(account.balance).to eq(1000)
@@ -54,8 +54,8 @@ RSpec.describe Rakka::PersistentActor do
 
     describe "recovery" do
       it "restores state from events" do
-        account.deposit(BankAccount::Deposit[1000])
-        account.withdraw(BankAccount::Withdraw[300])
+        account.deposit(1000)
+        account.withdraw(300)
 
         recovered = BankAccount.new("test-account")
 

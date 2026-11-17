@@ -25,7 +25,7 @@ before = rss_mb
 started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
 count.times do |i|
-  BankAccount.new("account-#{i}", system: system).deposit(BankAccount::Deposit[i])
+  BankAccount.new("account-#{i}", system: system).deposit(i)
 end
 
 elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
