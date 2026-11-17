@@ -1,5 +1,5 @@
 title: Rakka
-description: Ruby 4.0 の Ractor で動く、アクター型のイベントソーシングライブラリ
+description: Ruby 4.0 の Ractor で動くアクター型イベントソーシングライブラリ
 lang: ja
 
 # 日本語はルート、英語は /en/ 以下。対訳ページは URL の /en の有無で対応させる

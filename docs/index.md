@@ -3,7 +3,7 @@ title: ホーム
 nav_order: 1
 permalink: /
 layout: landing
-description: 状態は散っても、また咲く。Ruby 4.0 の Ractor で動く、アクター型のイベントソーシングライブラリ。
+description: Ruby 4.0 の Ractor で動くアクター型イベントソーシングライブラリ。
 ---
 
 ```ruby
