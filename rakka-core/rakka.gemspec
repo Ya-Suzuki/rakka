@@ -3,12 +3,12 @@
 Gem::Specification.new do |spec|
   spec.name = "rakka"
   spec.version = "0.1.0"
-  spec.authors = ["Your Name"]
-  spec.email = ["your@email.com"]
+  spec.authors = ["Ya-Suzuki"]
+  spec.email = ["Ya-Suzuki@users.noreply.github.com"]
 
   spec.summary = "Ractor-based Actor Event Sourcing for Ruby"
   spec.description = "A Ruby library for building event-sourced applications using Ractor for true parallelism. Inspired by Akka."
-  spec.homepage = "https://github.com/yourusername/rakka"
+  spec.homepage = "https://github.com/Ya-Suzuki/rakka"
   spec.license = "MIT"
   spec.required_ruby_version = ">= 4.0.0"
 
