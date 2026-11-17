@@ -113,6 +113,13 @@ module Rakka
           nil # 読めないスナップショット（クラスが消えた等）は無いものとして扱う
         end
 
+        def recover(stream_id, schema)
+          snapshot_schema, version, state = (load_snapshot(stream_id) if schema)
+          return [0, nil, read(stream_id)] unless snapshot_schema && snapshot_schema == schema
+
+          [version, state, read(stream_id, version)]
+        end
+
         def close
           @conn.close
         rescue PG::Error
