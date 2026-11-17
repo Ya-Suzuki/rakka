@@ -4,7 +4,7 @@ Gem::Specification.new do |spec|
   spec.name = "rakka"
   spec.version = "0.1.0"
   spec.authors = ["Ya-Suzuki"]
-  spec.email = ["Ya-Suzuki@users.noreply.github.com"]
+  spec.email = ["32971744+Ya-Suzuki@users.noreply.github.com"]
 
   spec.summary = "Ractor-based Actor Event Sourcing for Ruby"
   spec.description = "A Ruby library for building event-sourced applications using Ractor for true parallelism. Inspired by Akka."
