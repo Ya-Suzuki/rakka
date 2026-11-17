@@ -1,0 +1,59 @@
+<% content_for :title, "出品一覧 | Auction House" %>
+
+<div class="layout">
+  <section>
+    <h1>出品一覧</h1>
+    <p class="hint">この一覧とランキングは<strong>読みモデル</strong>（auction_listings / bids テーブル）から表示しています。書き込みはアクターがイベントとして記録し、それを購読して更新しています。</p>
+
+    <% if @listings.empty? %>
+      <p class="empty">まだ出品がありません。右のフォームから出品するか、<code>bin/rails db:seed</code> でサンプルを入れてください。</p>
+    <% else %>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr><th>タイトル</th><th>出品者</th><th class="num">価格</th><th class="num">入札</th><th>状態</th></tr>
+          </thead>
+          <tbody>
+            <% @listings.each do |listing| %>
+              <tr>
+                <td><%= link_to listing.title, auction_path(listing.auction_id) %></td>
+                <td><%= listing.seller %></td>
+                <td class="num"><%= yen(listing.final_price || listing.price) %></td>
+                <td class="num"><%= listing.bid_count %></td>
+                <td><span class="badge badge--<%= listing.status %>"><%= listing.status_label %></span></td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    <% end %>
+  </section>
+
+  <aside>
+    <div class="card">
+      <h2>出品する</h2>
+      <%= form_with url: auctions_path, class: "stack" do |f| %>
+        <label>タイトル <%= f.text_field :title, required: true, placeholder: "古伊万里の皿" %></label>
+        <label>開始価格（円） <%= f.number_field :starting_price, min: 1, required: true, value: 1000 %></label>
+        <label>即決価格（円・任意） <%= f.number_field :buyout_price, min: 1 %></label>
+        <%= f.submit "出品", class: "btn" %>
+      <% end %>
+    </div>
+
+    <div class="card">
+      <h2>入札者ランキング</h2>
+      <% if @leaderboard.empty? %>
+        <p class="empty">まだ入札がありません</p>
+      <% else %>
+        <table class="table table--compact">
+          <thead><tr><th>入札者</th><th class="num">落札</th><th class="num">落札額</th><th class="num">入札</th></tr></thead>
+          <tbody>
+            <% @leaderboard.each do |row| %>
+              <tr><td><%= row.bidder %></td><td class="num"><%= row.wins %></td><td class="num"><%= row.wins.zero? ? "—" : yen(row.spent) %></td><td class="num"><%= row.bids %></td></tr>
+            <% end %>
+          </tbody>
+        </table>
+      <% end %>
+    </div>
+  </aside>
+</div>

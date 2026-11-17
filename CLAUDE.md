@@ -10,8 +10,9 @@ Claude Code (claude.ai/code) 向けのプロジェクトガイダンス。
 
 ```
 rakka/
-├── rakka-core/     # コアライブラリ (gem "rakka")
-└── rakka-rails/    # Rails統合 (gem "rakka-rails")
+├── rakka-core/               # コアライブラリ (gem "rakka")
+├── rakka-rails/              # Rails統合 (gem "rakka-rails")
+└── examples/auction_house/   # Railsのサンプルアプリ（オークション）。上の2つをpathで参照する
 ```
 
 ## コマンド
@@ -33,6 +34,15 @@ ruby examples/postgres_demo.rb
 cd rakka-rails
 bundle install
 bundle exec rspec
+```
+
+```bash
+# サンプルアプリ（PostgreSQLが必要）
+cd examples/auction_house
+bundle install
+bin/rails db:setup
+bin/rails test
+bin/rails server
 ```
 
 ## アーキテクチャ

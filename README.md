@@ -25,9 +25,14 @@ Akkaにインスパイアされた設計で、少数のRactor上に多数の軽�
 
 ```
 rakka/
-├── rakka-core/     # コアライブラリ (gem "rakka")
-└── rakka-rails/    # Rails統合 (gem "rakka-rails")
+├── rakka-core/               # コアライブラリ (gem "rakka")
+├── rakka-rails/              # Rails統合 (gem "rakka-rails")
+└── examples/auction_house/   # Railsのサンプルアプリ
 ```
+
+## サンプルアプリ
+
+[`examples/auction_house`](examples/auction_house) は、ネットオークションを題材にした Rails アプリです。1出品 = 1アクターでの同時入札、イベント履歴からのタイムトラベル表示、作り直せる読みモデルを、画面とコマンドで確かめられます。
 
 ## インストール
 
