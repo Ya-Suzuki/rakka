@@ -1,11 +1,13 @@
 /*
- * 落花: 花びらが散り続けて、ページの底（フッターの下）に積もる。途中を読んでいる
+ * 落花: 花びらが舞いながら散り、ページの底（フッターの下）に積もる。途中を読んでいる
  * 間は画面の下を通り抜けて見えなくなり、最後までスクロールすると山が見える。
  * フッターの一言を押すと、全部が巻き戻ってから同じように散り直し、同じ場所に積もる。
  *
  * 花びらの動きは「生まれた時刻と乱数から決まる値（イベント）」と「経過時間」だけで
  * 決まる純粋な関数（place）なので、巻き戻しも再生も、時間を動かすだけでできる。
  * 積もる位置も、散った順番だけで決まる。Rakka がイベントから状態を作り直すのと同じ。
+ *
+ * 描画はすべてベクター。積もった山は、変わったときだけ実寸の裏画面に描き直して貼る。
  */
 (function () {
   'use strict';
@@ -38,43 +40,23 @@
     [[12.5, 17, 20, 17, 20, 52], '#c23040'],
     [[20, 17, 27.5, 17, 20, 52], '#a81f2a'],
     [[27.5, 17, 35, 17, 20, 52], '#86131c']
-  ];
-
-  // 表と裏の絵を先に作っておき、毎フレームはそれを貼るだけにする
-  function sprite(back) {
-    var k = 4, c = document.createElement('canvas');
-    c.width = 40 * k;
-    c.height = 52 * k;
-    var g = c.getContext('2d');
-    g.scale(k, k);
-    g.clip(OUTLINE);
-    FACETS.forEach(function (f) {
-      var pts = f[0];
-      g.beginPath();
-      g.moveTo(pts[0], pts[1]);
-      for (var i = 2; i < pts.length; i += 2) g.lineTo(pts[i], pts[i + 1]);
-      g.closePath();
-      g.fillStyle = f[1];
-      g.fill();
-      g.strokeStyle = 'rgba(255, 255, 255, 0.18)';
-      g.lineWidth = 0.5;
-      g.stroke();
-    });
-    if (back) {
-      g.fillStyle = 'rgba(70, 0, 12, 0.3)';
-      g.fillRect(0, 0, 40, 52);
-    }
-    return c;
-  }
-  var FRONT = sprite(false), BACK = sprite(true);
+  ].map(function (f) {
+    var pts = f[0], path = new Path2D();
+    path.moveTo(pts[0], pts[1]);
+    for (var i = 2; i < pts.length; i += 2) path.lineTo(pts[i], pts[i + 1]);
+    path.closePath();
+    return { path: path, color: f[1] };
+  });
 
   var BINS = 72;          // 積もる位置の区切り（画面幅によらず一定。幅を変えても同じ山になる）
   var LAYER = 3.2;        // 1枚積もるごとに山が高くなる量（px）
   var HEAP_MAX = 40;      // 山の高さの上限（px）
   var PILE_MAX = 180;     // 積もらせる枚数の上限。超えたら画面の外へ落ちて消える
+  var PILE_ZONE = 120;    // ページの底から、山を描く範囲の高さ（px）
   var REWIND = 2.4;       // 巻き戻しにかける秒数（全体）
   var LIFT = 1.1;         // 一枚が舞い上がるのにかける秒数。最後に散ったものから順に、ずらして上がる
   var REPLAY_SPAN = 4.5;  // 再生で、最後の花びらが散り始めるまでの秒数
+  var SIZE = 0.74;        // 花びらの大きさ（40x52 に掛ける）
 
   var seed = 20261117;
   function random() {
@@ -83,7 +65,7 @@
   }
 
   var W = 0, H = 0, dpr = 1;
-  var docH = 0, scrollY = 0; // 山はページの底にあるので、描くたびに画面上の位置へ直す
+  var docH = 0, scrollY = 0;
   var clock = 0;          // ページが見えている間だけ進む時計（秒）
   var petals = [];        // 散った花びら（イベントの列）
   var heap = [];          // 区切りごとの山の高さ
@@ -98,16 +80,17 @@
     var end = Math.min(0.995, 1 - 0.97 * Math.pow(random(), 1.7));
     var x = Math.max(0.005, end - (0.04 + random() * 0.18));
     var bin = Math.floor(end * BINS);
-    var scale = 0.5 + random() * 0.5;
+    var scale = 0.55 + random() * 0.45;
     var p = {
       born: born,
       x: x, drift: end - x,
-      dur: 9 + random() * 7,
-      swayAmp: 10 + random() * 26,
-      swayF: 0.6 + random() * 0.8,
-      phase: random() * Math.PI * 2,
-      spin: (random() - 0.5) * 220,
-      flipF: 1.2 + random() * 2.2,
+      dur: 11 + random() * 8,
+      // 舞い方: 二つの揺れを重ね、落ちる速さにも緩急（ときどき風で持ち上がる）をつける
+      swayA: 18 + random() * 40, swayF: 0.5 + random() * 0.6, phase: random() * Math.PI * 2,
+      wobbleA: 6 + random() * 14, wobbleF: 1.3 + random() * 1.4, phase2: random() * Math.PI * 2,
+      gust: 0.5 + random() * 0.8, gusts: 2 + Math.floor(random() * 3),
+      spin: (random() - 0.5) * 140,
+      flipF: 1.4 + random() * 2.6,
       scale: scale,
       restRot: random() * 360,
       restFlip: 0.35 + random() * 0.65,
@@ -133,20 +116,24 @@
   function ease(q) { return q < 0.5 ? 4 * q * q * q : 1 - Math.pow(-2 * q + 2, 3) / 2; }
 
   // --- 状態: 経過時間 t の花びらの位置（イベントと経過時間から決まる純粋な関数） ---
-  // 花びらは画面の上から下へ抜けるように落ちる。ページの底の山が画面に見えていれば、
-  // その上で止まる。見えていなければ画面の外へ抜け、底に積もったことになる
+  // 画面の上から下へ抜けるように舞い落ちる。ページの底の山が画面に見えていれば、その上で
+  // 止まる。見えていなければ画面の外へ抜け、底に積もったことになる
   function place(p, t) {
     var q = Math.max(0, Math.min(1, t / p.dur));
-    var fallY = -60 + (H + 120) * q;
+    var baseY = -60 + (H + 120) * q;
     var restY = p.piled ? docH - 10 - p.lift - scrollY : Infinity;
-    var near = Math.max(0, Math.min(1, (restY - fallY) / 140));
-    var settle = Math.max(Math.pow(q, 4), 1 - near); // 山に近づくほど揺れが収まる
+    var near = Math.max(0, Math.min(1, (restY - baseY) / 160));
+    var calm = 1 - Math.max(Math.pow(q, 4), 1 - near); // 山に近づくほど舞いが収まる
+    var n = p.gusts * 2 * Math.PI;
+    var gustY = (H + 120) * p.gust * Math.sin(n * q) / n * calm; // 0 と 1 で 0 になる緩急
+    var swayX = (p.swayA * Math.sin(p.swayF * t + p.phase) + p.wobbleA * Math.sin(p.wobbleF * t + p.phase2)) * calm;
+    var landed = p.piled && baseY >= restY;
     return {
-      x: (p.x + p.drift * Math.max(q, 1 - near)) * W + p.swayAmp * Math.sin(p.swayF * t + p.phase) * (1 - settle),
-      y: Math.min(fallY, restY),
-      rot: (p.restRot + p.spin * (p.dur - Math.min(t, p.dur)) * (1 - settle) / 10) * Math.PI / 180,
-      flip: Math.cos(p.flipF * t) * (1 - settle) + p.restFlip * settle,
-      settled: p.piled && fallY >= restY,
+      x: (p.x + p.drift * Math.max(q, 1 - near)) * W + swayX,
+      y: landed ? restY : Math.min(baseY + gustY, restY),
+      rot: (p.restRot + (p.spin * t + 28 * Math.sin(p.swayF * t + p.phase)) * calm) * Math.PI / 180,
+      flip: Math.cos(p.flipF * t) * calm + p.restFlip * (1 - calm),
+      settled: landed && calm === 0,
       visible: t >= 0
     };
   }
@@ -161,15 +148,53 @@
     return clock - modeStart - replayOffsets[i];
   }
 
-  function draw(p, s) {
-    if (!s.visible || s.y > H + 60 || s.y < -80) return;
-    var k = 0.74 * p.scale;
-    // 裏返るときは左右を反転して、裏の絵を貼る
-    var sx = (s.flip < 0 ? -1 : 1) * Math.max(0.08, Math.abs(s.flip));
-    ctx.setTransform(dpr * k * sx, 0, 0, dpr * k, s.x * dpr, s.y * dpr);
-    ctx.rotate(s.rot);
-    ctx.globalAlpha = p.piled && s.settled ? 0.82 : 0.96;
-    ctx.drawImage(s.flip < 0 ? BACK : FRONT, -20, -26, 40, 52);
+  // ベクターで一枚描く。g は描き先、(x, y) はその描き先での位置（CSS px）
+  function paint(g, p, s, x, y) {
+    var k = SIZE * p.scale;
+    var sx = (s.flip < 0 ? -1 : 1) * Math.max(0.06, Math.abs(s.flip)); // 裏返るときは左右も反転
+    g.setTransform(dpr * k * sx, 0, 0, dpr * k, x * dpr, y * dpr);
+    g.rotate(s.rot);
+    g.translate(-20, -26);
+    g.globalAlpha = s.settled ? 0.85 : 0.97;
+    g.save();
+    g.clip(OUTLINE);
+    for (var i = 0; i < FACETS.length; i++) {
+      g.fillStyle = FACETS[i].color;
+      g.fill(FACETS[i].path);
+    }
+    if (s.flip < 0) {
+      g.fillStyle = 'rgba(70, 0, 12, 0.3)';
+      g.fill(OUTLINE);
+    }
+    g.restore();
+  }
+
+  // --- 積もった山の裏画面（ページの底から PILE_ZONE の範囲） ---
+  var pile = document.createElement('canvas');
+  var pileCtx = pile.getContext('2d');
+  var pileKey = '';
+
+  function pileLanded(p) { return p.piled && clock - p.born >= p.dur; }
+
+  function refreshPile() {
+    var landed = 0;
+    for (var i = 0; i < petals.length; i++) if (pileLanded(petals[i])) landed++;
+    var key = [landed, W, dpr, docH].join(',');
+    if (key === pileKey) return;
+    pileKey = key;
+    pile.width = Math.round(W * dpr);
+    pile.height = Math.round(PILE_ZONE * dpr);
+    pileCtx.setTransform(1, 0, 0, 1, 0, 0);
+    pileCtx.clearRect(0, 0, pile.width, pile.height);
+    var top = docH - PILE_ZONE; // 裏画面の上端（ページ上の座標）
+    var savedScroll = scrollY;
+    scrollY = top;               // place が返す y を裏画面の座標にする
+    petals.forEach(function (p) {
+      if (!pileLanded(p)) return;
+      var s = place(p, p.dur);
+      paint(pileCtx, p, s, s.x, s.y);
+    });
+    scrollY = savedScroll;
   }
 
   function frame() {
@@ -178,12 +203,22 @@
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+    var cached = mode === 'live';
+    if (cached) {
+      refreshPile();
+      var pileTop = docH - PILE_ZONE - scrollY;
+      if (pileTop < H) ctx.drawImage(pile, 0, Math.round(pileTop * dpr));
+    }
+
     var done = true;
     for (var i = 0; i < petals.length; i++) {
       var p = petals[i];
       var t = elapsed(p, i);
       if (t < p.dur) done = false;
-      draw(p, place(p, t));
+      if (cached && pileLanded(p)) continue; // 裏画面に描いてある
+      var s = place(p, t);
+      if (!s.visible || s.y > H + 60 || s.y < -80) continue;
+      paint(ctx, p, s, s.x, s.y);
     }
 
     if (mode === 'rewind' && clock - modeStart >= REWIND + 0.15) startReplay();
@@ -191,7 +226,7 @@
     if (mode === 'live') {
       while (clock >= nextSpawn) {
         spawn(nextSpawn);
-        nextSpawn += 0.9 + random() * 1.4;
+        nextSpawn += 3 + random() * 3.5; // 同時に舞うのは3〜4枚ほど
       }
       // 積もらない花びらは、落ちきったら捨てる
       petals = petals.filter(function (p) { return p.piled || clock - p.born < p.dur; });
@@ -222,8 +257,9 @@
 
   function finishReplay() {
     // 再生が終わった時点を、それぞれが散り終えた状態として live に戻す
-    petals.forEach(function (p, i) { p.born = clock - (clock - modeStart - replayOffsets[i]); });
-    nextSpawn = clock + 1.2;
+    petals.forEach(function (p, i) { p.born = modeStart + replayOffsets[i]; });
+    nextSpawn = clock + 2;
+    pileKey = '';
     mode = 'live';
     document.documentElement.classList.remove('is-replaying');
   }
@@ -255,7 +291,7 @@
   function stop() { running = false; }
 
   // 開いた時点で、何枚かはもう宙にある
-  for (var n = 0; n < 9; n++) spawn(-n * 1.5 - random());
+  for (var n = 0; n < 4; n++) spawn(-n * 4.5 - random() * 2);
   petals.sort(function (a, b) { return a.born - b.born; });
   // 先に生まれたものから山に載せ直す（並べ替えた順番が、散った順番）
   heap = [];
@@ -265,7 +301,7 @@
     p.lift = Math.min(heap[bin] || 0, HEAP_MAX) + p.jitter;
     heap[bin] = (heap[bin] || 0) + LAYER * p.scale;
   });
-  nextSpawn = 0.8;
+  nextSpawn = 1.5;
 
   resize();
   window.addEventListener('resize', resize);
@@ -287,9 +323,13 @@
   // テスト・デバッグ用（時間を進める・状態を見る）
   window.__rakkaPetals = {
     advance: function (seconds) { for (var s = 0; s < seconds; s += 0.05) { clock += 0.05; frame(); } },
-    state: function () { return { mode: mode, count: petals.length, piled: countPiled(),
-      // 積もる位置（ページ上の座標。スクロール位置によらない）
-      rests: petals.filter(function (p) { return p.piled; }).map(function (p) { return [Math.round((p.x + p.drift) * W), Math.round(docH - 10 - p.lift)]; }) }; },
+    state: function () {
+      var flying = 0;
+      petals.forEach(function (p) { var t = clock - p.born; if (mode === 'live' && t >= 0 && t < p.dur) flying++; });
+      return { mode: mode, count: petals.length, piled: countPiled(), flying: flying,
+        // 積もる位置（ページ上の座標。スクロール位置によらない）
+        rests: petals.filter(function (p) { return p.piled; }).map(function (p) { return [Math.round((p.x + p.drift) * W), Math.round(docH - 10 - p.lift)]; }) };
+    },
     rewind: rewind
   };
 })();
