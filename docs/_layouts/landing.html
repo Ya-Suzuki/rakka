@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-<html lang="{{ site.lang | default: 'ja' }}">
+<html lang="{{ page.lang | default: site.lang }}">
+{%- assign t = site.data.landing[page.lang] -%}
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -10,6 +11,9 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Yuji+Syuku&text=%E8%90%BD%E8%8A%B1&display=swap">
   <link rel="icon" href="{{ '/assets/images/rakkan.svg' | relative_url }}" type="image/svg+xml">
   <link rel="stylesheet" href="{{ '/assets/css/landing.css' | relative_url }}">
+  {%- include lang_twin.html %}
+  <link rel="alternate" hreflang="{{ page.lang }}" href="{{ page.url | absolute_url }}">
+  <link rel="alternate" hreflang="{{ twin_lang }}" href="{{ twin_url | absolute_url }}">
 </head>
 <body>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -32,12 +36,13 @@
   </svg>
 
   <header class="topbar">
-    <a class="brand" href="{{ '/' | relative_url }}"><span class="rakkan" aria-hidden="true">落花</span>Rakka</a>
-    <nav class="topnav" aria-label="サイト">
-      <a href="getting-started.html">はじめに</a>
-      <a href="concepts/">仕組み</a>
-      <a href="faq.html">よくある疑問</a>
+    <a class="brand" href="{{ page.url | relative_url }}"><span class="rakkan" aria-hidden="true">落花</span>Rakka</a>
+    <nav class="topnav" aria-label="{{ t.nav_label }}">
+      {%- for item in t.nav %}
+      <a href="{{ item.href }}">{{ item.label }}</a>
+      {%- endfor %}
       <a href="https://github.com/Ya-Suzuki/rakka">GitHub</a>
+      <a class="lang" href="{{ t.switch.href | relative_url }}" hreflang="{{ t.switch.lang }}" lang="{{ t.switch.lang }}">{{ t.switch.label }}</a>
     </nav>
   </header>
 
@@ -51,20 +56,17 @@
     </div>
 
     <div class="hero__inner">
-      <p class="hero__title" aria-label="落花（らっか）">
-        <ruby>落花<rt>らっか</rt></ruby>
+      <p class="hero__title" lang="ja" aria-label="落花（{{ t.reading }}）">
+        <ruby>落花<rt>{{ t.reading }}</rt></ruby>
       </p>
 
       <div class="hero__body">
-        <p class="eyebrow">Ruby 4.0 &middot; Ractor &middot; Event Sourcing</p>
-        <h1>状態は散っても、<br>イベントから<br><em>何度でも咲く。</em></h1>
-        <p class="lead">
-          Rakka は、Ruby の Ractor の上で数万のアクターを動かす、イベントソーシングのライブラリです。
-          集約ひとつが花びらひとつ。散っても、幹に残ったイベントから同じ姿で咲き直します。
-        </p>
+        <p class="eyebrow">{{ t.eyebrow }}</p>
+        <h1>{% for line in t.headline %}{{ line }}<br>{% endfor %}<em>{{ t.headline_em }}</em></h1>
+        <p class="lead">{{ t.lead }}</p>
         <div class="cta">
-          <a class="btn btn--shu" href="getting-started.html">はじめる</a>
-          <a class="btn btn--line" href="concepts/actors-and-ractors.html">仕組みを読む</a>
+          <a class="btn btn--shu" href="getting-started.html">{{ t.cta_primary }}</a>
+          <a class="btn btn--line" href="concepts/actors-and-ractors.html">{{ t.cta_secondary }}</a>
         </div>
         <p class="install"><code>gem "rakka", github: "Ya-Suzuki/rakka", glob: "rakka-core/*.gemspec"</code></p>
       </div>
@@ -73,43 +75,27 @@
 
   <main>
     <section class="tenets" aria-labelledby="tenets-title">
-      <h2 id="tenets-title" class="section-title"><span>四つの性質</span></h2>
+      <h2 id="tenets-title" class="section-title"><span>{{ t.tenets_title }}</span></h2>
       <ol class="tenet-list">
+        {%- for tenet in t.tenets %}
         <li>
-          <span class="kanji" aria-hidden="true">軽</span>
-          <h3>花びらは軽い</h3>
-          <p>アクターは Ractor ではなく、シャード Ractor の中の小さな記録です。5万の集約を載せても、Ractor は6つ。1つあたり約1KBです。</p>
-          <a href="concepts/actors-and-ractors.html">アクターと Ractor</a>
+          <span class="kanji" lang="ja" aria-hidden="true">{{ tenet.kanji }}</span>
+          <h3>{{ tenet.title }}</h3>
+          <p>{{ tenet.body }}</p>
+          <a href="{{ tenet.link.href }}">{{ tenet.link.label }}</a>
         </li>
-        <li>
-          <span class="kanji" aria-hidden="true">散</span>
-          <h3>散っても困らない</h3>
-          <p><code>handle</code> が例外を出したら、その花びらだけを散らします。状態はイベントから咲き直すので、何も失いません。</p>
-          <a href="concepts/failures.html">障害処理</a>
-        </li>
-        <li>
-          <span class="kanji" aria-hidden="true">巡</span>
-          <h3>風が偏りを均す</h3>
-          <p>負荷が一つの Ractor に偏ると、溜まった集約を空いた Ractor へ運びます。いつ・どれを運ぶかは実測から決まり、設定はいりません。</p>
-          <a href="concepts/rebalancing.html">リバランス</a>
-        </li>
-        <li>
-          <span class="kanji" aria-hidden="true">残</span>
-          <h3>幹は残る</h3>
-          <p>イベントは書き換えません。楽観ロックで複数のプロセスから書いても整合し、スナップショットで復元は一瞬です。</p>
-          <a href="concepts/persistence.html">永続化と復元</a>
-        </li>
+        {%- endfor %}
       </ol>
     </section>
 
     <section class="code" aria-labelledby="code-title">
       <div class="code__text">
-        <h2 id="code-title" class="section-title section-title--left"><span>Ruby らしく書く</span></h2>
-        <p>コマンドを受けてイベントを返す <code>handle</code> と、イベントから状態を作る <code>apply_event</code>。書くのはこの二つだけです。</p>
+        <h2 id="code-title" class="section-title section-title--left"><span>{{ t.code_title }}</span></h2>
+        <p>{{ t.code_intro }}</p>
         <ul>
-          <li>コマンドとイベントは <code>Data.define</code> で、パターンマッチで捌く</li>
-          <li>どちらも純粋な関数なので、DB なしでテストできる</li>
-          <li>同じ集約へのコマンドは一列に並ぶので、ロックはいらない</li>
+          {%- for point in t.code_points %}
+          <li>{{ point }}</li>
+          {%- endfor %}
         </ul>
       </div>
       <div class="code__card">
@@ -118,37 +104,28 @@
       </div>
     </section>
 
-    <section class="numbers" aria-label="計測結果">
+    <section class="numbers" aria-label="{{ t.numbers_label }}">
+      {%- for n in t.numbers %}
       <div>
-        <p class="num"><b>50,000</b><small>アクター</small> <span class="arrow">→</span> <b>6</b><small>Ractor</small></p>
-        <p>数万の集約を、コア数ほどの Ractor に載せる</p>
+        <p class="num"><b>{{ n.from }}</b><small>{{ n.from_unit }}</small> <span class="arrow">→</span> <b>{{ n.to }}</b><small>{{ n.to_unit }}</small></p>
+        <p>{{ n.text }}</p>
       </div>
-      <div>
-        <p class="num"><b>4.8</b><small>秒</small> <span class="arrow">→</span> <b>1.6</b><small>秒</small></p>
-        <p>一つの Ractor に偏った負荷を、自動で均す</p>
-      </div>
-      <div>
-        <p class="num"><b>28</b><small>ms</small> <span class="arrow">→</span> <b>0.3</b><small>ms</small></p>
-        <p>1万イベントの集約を、スナップショットから復元する</p>
-      </div>
+      {%- endfor %}
     </section>
 
     <section class="paths" aria-labelledby="paths-title">
-      <h2 id="paths-title" class="section-title"><span>どこから読むか</span></h2>
+      <h2 id="paths-title" class="section-title"><span>{{ t.paths_title }}</span></h2>
       <div class="path-list">
-        <a href="getting-started.html"><b>はじめに</b><span>インストールから、最初の集約まで</span></a>
-        <a href="concepts/"><b>仕組み</b><span>メールボックス、リバランス、永続化、障害処理</span></a>
-        <a href="rails.html"><b>Rails で使う</b><span>ジェネレータ、設定、本番の構成</span></a>
-        <a href="sample-app.html"><b>サンプルアプリ</b><span>オークションで見る、同時入札とタイムトラベル</span></a>
-        <a href="faq.html"><b>よくある疑問</b><span>Ractor を使う意味、Akka や Erlang との違い</span></a>
-        <a href="development.html"><b>開発</b><span>テストとデモスクリプト</span></a>
+        {%- for path in t.paths %}
+        <a href="{{ path.href }}"><b>{{ path.title }}</b><span>{{ path.text }}</span></a>
+        {%- endfor %}
       </div>
     </section>
   </main>
 
   <footer class="footer">
     <span class="rakkan" aria-hidden="true">落花</span>
-    <p>Rakka = <b>Ra</b>ctor + Ak<b>ka</b>。落ちる花のように、軽く、散っても咲く。<br>MIT License &middot; <a href="https://github.com/Ya-Suzuki/rakka">GitHub</a></p>
+    <p>{{ t.footer }}<br>MIT License &middot; <a href="https://github.com/Ya-Suzuki/rakka">GitHub</a> &middot; <a href="{{ t.switch.href | relative_url }}" hreflang="{{ t.switch.lang }}" lang="{{ t.switch.lang }}">{{ t.switch.label }}</a></p>
   </footer>
 </body>
 </html>

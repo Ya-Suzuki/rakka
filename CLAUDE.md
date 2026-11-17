@@ -13,7 +13,7 @@ rakka/
 ├── rakka-core/               # コアライブラリ (gem "rakka")
 ├── rakka-rails/              # Rails統合 (gem "rakka-rails")
 ├── examples/auction_house/   # Railsのサンプルアプリ（オークション）。上の2つをpathで参照する
-└── docs/                     # ドキュメントサイト（GitHub Pages、Jekyll + Just the Docs）。編集の注意は docs/README.md
+└── docs/                     # ドキュメントサイト（GitHub Pages、Jekyll + Just the Docs）。日本語はルート、英語は docs/en/ の同じパス。編集の注意は docs/README.md
 ```
 
 ## コマンド

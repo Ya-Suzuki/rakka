@@ -239,3 +239,65 @@ p.warning, blockquote.warning { background: $kitsune-000; }
 .main-content-wrap footer, .site-footer {
   font-size: 0.8rem !important;
 }
+
+// --- Languages ---
+// The nav is built once for all pages, so it lists both languages; each item
+// carries its page's lang (components/nav/links.html). Show only the current one.
+html[lang="ja"] .site-nav li.nav-list-item[lang="en"],
+html[lang="en"] .site-nav li.nav-list-item[lang="ja"] {
+  display: none;
+}
+
+// Callout titles differ per language (Japanese written as CSS escapes: SCSS stays ASCII)
+p.note, p.important, p.warning,
+blockquote.note, blockquote.important, blockquote.warning {
+  &::before {
+    display: block;
+    font-weight: 700;
+    font-size: 0.78em;
+    letter-spacing: 0.1em;
+    padding-bottom: 0.15rem;
+  }
+}
+
+p.note::before, blockquote.note::before { content: "\30E1\30E2"; color: $sumi-300; }
+p.important::before, blockquote.important::before { content: "\5927\4E8B\306A\3053\3068"; color: $shu-300; }
+p.warning::before, blockquote.warning::before { content: "\6CE8\610F"; color: $kitsune-300; }
+
+html[lang="en"] {
+  p.note::before, blockquote.note::before { content: "Note"; }
+  p.important::before, blockquote.important::before { content: "Important"; }
+  p.warning::before, blockquote.warning::before { content: "Warning"; }
+}
+
+// Language switch in the header
+.lang-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-right: 1rem;
+  padding: 0.2rem 0.75rem;
+  border: 1px solid $washi-line;
+  border-radius: 999px;
+  color: $sumi-soft !important;
+  font-size: 0.8rem;
+  text-decoration: none;
+  white-space: nowrap;
+
+  &::before {
+    content: "";
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: $shu;
+  }
+
+  &:hover {
+    border-color: $shu;
+    color: $shu !important;
+  }
+}
+
+.main-header {
+  align-items: center;
+}

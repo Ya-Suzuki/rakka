@@ -7,13 +7,32 @@ GitHub Pages で公開するドキュメントのソース（Jekyll + [Just the 
 - ページ間のリンクは `getting-started.html` のように `.html` までつけて書く
 - `_includes/` はテーマへの差し込み。日本語で検索できるようにする処理（`lunr/custom-index.js`）と、日本語入力の確定で検索を走らせる処理（`head_custom.html`）がある。テーマはHTMLを1行に圧縮するので、`head_custom.html` のスクリプトに `//` コメントは使わない
 
+## 日本語と英語
+
+日本語のページはルート、英語のページは `en/` 以下の同じパスに置く（`getting-started.md` と `en/getting-started.md`）。ページの言語は `_config.yml` の `defaults` が置き場所から決めるので、front matter に `lang` は書かなくてよい。
+
+- ヘッダーの切り替えリンク（`_includes/header_custom.html`）は、URL の `/en` の有無で対訳ページを探す（`_includes/lang_twin.html`）。対訳が無ければ、もう一方の言語のトップに飛ぶ
+- サイドバーはテーマが全ページ共通で1回だけ作ってキャッシュするので、両方の言語を並べたうえで、各項目に付けた `lang` を見て、表示中でない言語を CSS で隠している
+- 検索は、表示中のページと同じ言語の文書だけを対象にする（`_includes/lunr/custom-index.js`）
+- トップページの文言は `_data/landing.yml` に言語ごとに書く。`{ ... }` の中で英文にカンマを含む値は、必ず引用符で囲む（囲まないとカンマで切れる）
+- 注記の見出し（メモ / Note など）は `_sass/custom/custom.scss` で言語ごとに付ける
+
+次のテーマのファイルは、v0.12.0 から写して数行だけ変えている。テーマのバージョンを上げるときは、元のファイルと見比べて写し直す。
+
+| ファイル | 変えたところ |
+|---|---|
+| `_layouts/default.html` | `<html lang>` をページの言語にする |
+| `_includes/components/nav/links.html` | ナビの各項目にページの言語を付ける |
+| `_includes/components/sidebar.html` | 題字のリンク先を、表示中の言語のトップにする |
+| `_includes/components/footer.html` | 「ページの先頭へ」「このページを編集」を言語で切り替える |
+
 ## デザイン
 
 「落花（らっか）」と Ruby の朱がテーマ。和紙の地、墨の文字、朱の差し色で、トップページでは Ruby の宝石のように面のついた花びらが舞う。
 
 | ファイル | 内容 |
 |---|---|
-| `_layouts/landing.html` / `assets/css/landing.css` | トップページ（サイドバーなしの専用レイアウト）。`index.md` の本文はコード例の欄に入る |
+| `_layouts/landing.html` / `assets/css/landing.css` | トップページ（サイドバーなしの専用レイアウト）。文言は `_data/landing.yml`、`index.md`（英語は `en/index.md`）の本文はコード例の欄に入る |
 | `_sass/custom/setup.scss` | 色の名前（和紙・墨・朱など）と注記の色 |
 | `_sass/color_schemes/rakka.scss` | テーマの変数への割り当て（`_config.yml` の `color_scheme: rakka`） |
 | `_sass/custom/custom.scss` | ドキュメントページの見た目（明朝の見出し、墨のコードブロック、注記など） |

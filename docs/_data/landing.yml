@@ -1,0 +1,110 @@
+# トップページ（_layouts/landing.html）の文言。キーは page.lang
+ja:
+  reading: らっか
+  nav:
+    - { label: はじめに, href: getting-started.html }
+    - { label: 仕組み, href: concepts/ }
+    - { label: よくある疑問, href: faq.html }
+  switch: { label: English, href: /en/, lang: en }
+  eyebrow: Ruby 4.0 &middot; Ractor &middot; Event Sourcing
+  headline: [状態は散っても、, イベントから]
+  headline_em: 何度でも咲く。
+  lead: >-
+    Rakka は、Ruby の Ractor の上で数万のアクターを動かす、イベントソーシングのライブラリです。
+    集約ひとつが花びらひとつ。散っても、幹に残ったイベントから同じ姿で咲き直します。
+  cta_primary: はじめる
+  cta_secondary: 仕組みを読む
+  tenets_title: 四つの性質
+  tenets:
+    - kanji: 軽
+      title: 花びらは軽い
+      body: アクターは Ractor ではなく、シャード Ractor の中の小さな記録です。5万の集約を載せても、Ractor は6つ。1つあたり約1KBです。
+      link: { label: アクターと Ractor, href: concepts/actors-and-ractors.html }
+    - kanji: 散
+      title: 散っても困らない
+      body: <code>handle</code> が例外を出したら、その花びらだけを散らします。状態はイベントから咲き直すので、何も失いません。
+      link: { label: 障害処理, href: concepts/failures.html }
+    - kanji: 巡
+      title: 風が偏りを均す
+      body: 負荷が一つの Ractor に偏ると、溜まった集約を空いた Ractor へ運びます。いつ・どれを運ぶかは実測から決まり、設定はいりません。
+      link: { label: リバランス, href: concepts/rebalancing.html }
+    - kanji: 残
+      title: 幹は残る
+      body: イベントは書き換えません。楽観ロックで複数のプロセスから書いても整合し、スナップショットで復元は一瞬です。
+      link: { label: 永続化と復元, href: concepts/persistence.html }
+  code_title: Ruby らしく書く
+  code_intro: コマンドを受けてイベントを返す <code>handle</code> と、イベントから状態を作る <code>apply_event</code>。書くのはこの二つだけです。
+  code_points:
+    - コマンドとイベントは <code>Data.define</code> で、パターンマッチで捌く
+    - どちらも純粋な関数なので、DB なしでテストできる
+    - 同じ集約へのコマンドは一列に並ぶので、ロックはいらない
+  numbers_label: 計測結果
+  numbers:
+    - { from: "50,000", from_unit: アクター, to: "6", to_unit: Ractor, text: "数万の集約を、コア数ほどの Ractor に載せる" }
+    - { from: "4.8", from_unit: 秒, to: "1.6", to_unit: 秒, text: "一つの Ractor に偏った負荷を、自動で均す" }
+    - { from: "28", from_unit: ms, to: "0.3", to_unit: ms, text: "1万イベントの集約を、スナップショットから復元する" }
+  paths_title: どこから読むか
+  paths:
+    - { title: はじめに, text: "インストールから、最初の集約まで", href: getting-started.html }
+    - { title: 仕組み, text: "メールボックス、リバランス、永続化、障害処理", href: concepts/ }
+    - { title: Rails で使う, text: "ジェネレータ、設定、本番の構成", href: rails.html }
+    - { title: サンプルアプリ, text: "オークションで見る、同時入札とタイムトラベル", href: sample-app.html }
+    - { title: よくある疑問, text: "Ractor を使う意味、Akka や Erlang との違い", href: faq.html }
+    - { title: 開発, text: "テストとデモスクリプト", href: development.html }
+  footer: Rakka = <b>Ra</b>ctor + Ak<b>ka</b>。落ちる花のように、軽く、散っても咲く。
+  nav_label: サイト
+
+en:
+  reading: rakka
+  nav:
+    - { label: Get started, href: getting-started.html }
+    - { label: How it works, href: concepts/ }
+    - { label: FAQ, href: faq.html }
+  switch: { label: 日本語, href: /, lang: ja }
+  eyebrow: Ruby 4.0 &middot; Ractor &middot; Event Sourcing
+  headline: [State falls away., Events make it]
+  headline_em: bloom again.
+  lead: >-
+    Rakka is an event sourcing library that runs tens of thousands of actors on Ruby's Ractors.
+    Each aggregate is a petal. Let it fall, and it blooms again, exactly as it was, from the events kept in the trunk.
+  cta_primary: Get started
+  cta_secondary: How it works
+  tenets_title: Four traits
+  tenets:
+    - kanji: 軽
+      title: Petals are light
+      body: An actor is not a Ractor but a small record inside a shard Ractor. Fifty thousand aggregates fit on six Ractors, at about 1 KB each.
+      link: { label: Actors and Ractors, href: concepts/actors-and-ractors.html }
+    - kanji: 散
+      title: Falling is fine
+      body: When <code>handle</code> raises, only that petal falls. Its state blooms again from the events, so nothing is lost.
+      link: { label: Failure handling, href: concepts/failures.html }
+    - kanji: 巡
+      title: The wind evens things out
+      body: When load piles up on one Ractor, waiting aggregates are carried to idle ones. When and which is decided from measurements, with nothing to tune.
+      link: { label: Rebalancing, href: concepts/rebalancing.html }
+    - kanji: 残
+      title: The trunk remains
+      body: Events are never rewritten. Optimistic locking keeps writes from many processes consistent, and snapshots make recovery instant.
+      link: { label: Persistence and recovery, href: concepts/persistence.html }
+  code_title: Written the Ruby way
+  code_intro: You write two methods. <code>handle</code> turns a command into events, and <code>apply_event</code> turns events into state.
+  code_points:
+    - Commands and events are <code>Data.define</code> values, matched with pattern matching
+    - Both are pure functions, so you can test them without a database
+    - Commands for one aggregate run one at a time, so there is nothing to lock
+  numbers_label: Measurements
+  numbers:
+    - { from: "50,000", from_unit: actors, to: "6", to_unit: Ractors, text: "Tens of thousands of aggregates on about as many Ractors as cores" }
+    - { from: "4.8", from_unit: s, to: "1.6", to_unit: s, text: "Load skewed onto one Ractor, evened out automatically" }
+    - { from: "28", from_unit: ms, to: "0.3", to_unit: ms, text: "Recovering a 10,000-event aggregate from a snapshot" }
+  paths_title: Where to start
+  paths:
+    - { title: Get started, text: "From installation to your first aggregate", href: getting-started.html }
+    - { title: How it works, text: "Mailboxes, rebalancing, persistence and failure handling", href: concepts/ }
+    - { title: Using with Rails, text: "Generators, configuration and production setup", href: rails.html }
+    - { title: Sample app, text: "Concurrent bidding and time travel in an auction app", href: sample-app.html }
+    - { title: FAQ, text: "Why Ractors at all, and how this compares to Akka and Erlang", href: faq.html }
+    - { title: Development, text: "Tests and demo scripts", href: development.html }
+  footer: Rakka = <b>Ra</b>ctor + Ak<b>ka</b>, and 落花, &ldquo;falling petals&rdquo;. Light, and blooming again after it falls.
+  nav_label: Site

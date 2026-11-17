@@ -53,7 +53,7 @@ cd examples/auction_house && bundle install && bin/rails db:setup && bin/rails t
 
 ## このサイトを編集する
 
-ページは `docs/` の Markdown です。各ページの「このページを編集」から GitHub 上で直接編集できます。`main` に入ると GitHub Pages が自動で作り直します。
+ページは `docs/` の Markdown です。英語版は `docs/en/` 以下の同じパスに置きます。各ページの「このページを編集」から GitHub 上で直接編集できます。`main` に入ると GitHub Pages が自動で作り直します。
 
 新しいページは、先頭に front matter を書きます。
 

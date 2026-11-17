@@ -7,7 +7,7 @@ Akkaにインスパイアされた設計で、少数のRactor上に多数の軽�
 
 名前の由来: **Ra**ctor + **Akka** = **Rakka**
 
-ドキュメント: https://ya-suzuki.github.io/rakka/ （仕組みの解説やよくある疑問はこちら）
+ドキュメント: https://ya-suzuki.github.io/rakka/ （仕組みの解説やよくある疑問はこちら。English: https://ya-suzuki.github.io/rakka/en/ ）
 
 ## 特徴
 

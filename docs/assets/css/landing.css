@@ -430,7 +430,7 @@ section { max-width: 1160px; margin: 0 auto; padding: 72px 24px; }
 @media (max-width: 640px) {
   .topbar { padding: 16px; }
   .topnav { gap: 14px; }
-  .topnav a:nth-child(3) { display: none; }
+  .topnav a:nth-child(3), .topnav a:nth-child(4) { display: none; }
   section { padding: 52px 16px; }
   .hero { min-height: auto; }
   .hero__inner { grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 8px 16px 56px; }
@@ -446,3 +446,18 @@ section { max-width: 1160px; margin: 0 auto; padding: 72px 24px; }
   .code__card { transform: none; }
   .footer { padding: 28px 16px 44px; }
 }
+
+/* --- 言語の切り替え --- */
+.topnav .lang {
+  padding: 0 0.85rem;
+  border: 1px solid var(--washi-line);
+  border-radius: 999px;
+  line-height: 1.9;
+}
+.topnav .lang:hover { border-color: var(--shu); }
+
+/* 英語版: 縦書きの題字は残し、見出しの字間を詰める */
+html[lang="en"] .hero h1 { letter-spacing: 0.005em; line-height: 1.18; }
+html[lang="en"] .hero__title rt { letter-spacing: 0.35em; }
+html[lang="en"] .section-title { letter-spacing: 0.03em; }
+html[lang="en"] .tenet-list h3 { letter-spacing: 0.01em; }

@@ -3,6 +3,15 @@
 // lunr は英語向けで、前処理（trimmer）が英数字以外を削るため、日本語の語がすべて消える。
 // そこで、日本語の部分を2文字ずつ（bigram）に区切ってから索引に入れ、検索語も同じように
 // 区切る。trimmer は、Unicode の文字と数字を残すものに置き換える。
+// 検索は表示中のページと同じ言語に絞る（英語のページは /en/ 以下）。
+// 違う言語の文書は中身を空にして、どの語にも当たらないようにする
+var docIsEnglish = (docs[i].relUrl || docs[i].url || '').indexOf('/en/') === 0;
+if (docIsEnglish !== (document.documentElement.lang === 'en')) {
+  docs[i].title = '';
+  docs[i].content = '';
+  docs[i].relUrl = '';
+}
+
 if (!this.jaSearchReady) {
   this.jaSearchReady = true;
 
