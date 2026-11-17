@@ -4,7 +4,7 @@ Gem::Specification.new do |spec|
   spec.name = "rakka-rails"
   spec.version = "0.1.0"
   spec.authors = ["Ya-Suzuki"]
-  spec.email = ["Ya-Suzuki@users.noreply.github.com"]
+  spec.email = ["32971744+Ya-Suzuki@users.noreply.github.com"]
 
   spec.summary = "Rails integration for Rakka"
   spec.description = "Rails integration for Rakka - Ractor-based Actor Event Sourcing. Provides generators, Railtie, and ActiveRecord configuration bridging."
