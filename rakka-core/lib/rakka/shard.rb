@@ -36,26 +36,29 @@ module Rakka
     # シャードRactorごと落ち、Supervisorが再起動する
     ACTOR_ERRORS = [StandardError, ScriptError].freeze
 
-    def self.spawn(index, connector, publisher_port, passivate_after:, max_actors:, throughput:)
-      Ractor.new(index, connector, publisher_port, passivate_after, max_actors, throughput,
-                 name: "rakka-shard-#{index}") do |i, conn, publisher, idle, max, slice|
-        Rakka::Shard.new(i, conn.connect, publisher,
-                         passivate_after: idle, max_actors: max, throughput: slice).run
+    # options: passivate_after, max_actors, throughput, mailbox_capacity
+    def self.spawn(index, connector, publisher_port, **options)
+      Ractor.new(index, connector, publisher_port, Ractor.make_shareable(options),
+                 name: "rakka-shard-#{index}") do |i, conn, publisher, opts|
+        Rakka::Shard.new(i, conn.connect, publisher, **opts).run
       end
     end
 
-    def initialize(index, journal, publisher_port, passivate_after:, max_actors:, throughput:)
+    def initialize(index, journal, publisher_port, passivate_after:, max_actors:, throughput:,
+                   mailbox_capacity: nil)
       @index = index
       @journal = journal
       @publisher = publisher_port
       @passivate_after = passivate_after
       @max_actors = max_actors
       @throughput = throughput
+      @mailbox_capacity = mailbox_capacity
 
       # stream_id => 未処理メッセージ。空になったら消すので、ここにあるアクター =
       # 実行待ちのアクター。挿入順がそのまま実行順（ランキュー）になる
       @mailboxes = {}
       @queued = 0
+      @dropped = 0
       @stopping = false
 
       # stream_id => Entry。挿入順 = 最後に使われた順（先頭が最も古い）
@@ -90,15 +93,29 @@ module Rakka
         passivate_idle
       in [:stats, reply]
         respond(reply, { index: @index, active_count: @actors.size, queued: @queued,
-                         processed: @processed, crashes: @crashes })
+                         processed: @processed, crashes: @crashes, dropped: @dropped })
       in [:stop]
         @stopping = true
       end
     end
 
     def enqueue(stream_id, message)
-      (@mailboxes[stream_id] ||= []) << message
+      mailbox = (@mailboxes[stream_id] ||= [])
+      return drop(stream_id, message) if @mailbox_capacity && mailbox.size >= @mailbox_capacity
+
+      mailbox << message
       @queued += 1
+    end
+
+    # メールボックスが満杯。溜め込まずに断り、送り手に過負荷を伝える
+    def drop(stream_id, message)
+      @dropped += 1
+
+      if (reply = message.last)
+        respond(reply, [:mailbox_full, stream_id])
+      else
+        warn "[Rakka] #{stream_id} mailbox is full (#{@mailbox_capacity}), message dropped"
+      end
     end
 
     # すでに届いているメッセージを、ブロックせずに全部メールボックスへ振り分ける

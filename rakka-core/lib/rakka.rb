@@ -13,6 +13,10 @@ module Rakka
   # 次のコマンドでイベントから再構築される
   class ActorCrashed < Error; end
 
+  # アクターのメールボックスが上限（mailbox_capacity）に達していて、メッセージを
+  # 受け付けなかった。処理が追いついていないので、送り手は待つか諦める
+  class MailboxFull < Error; end
+
   # シャードRactorが落ちた、または停止している
   class ShardUnavailable < Error; end
 
@@ -20,7 +24,8 @@ module Rakka
     attr_accessor :event_store
 
     # ActorSystem settings
-    attr_writer :shard_count, :passivate_after, :max_actors_per_shard, :throughput
+    attr_writer :shard_count, :passivate_after, :max_actors_per_shard, :throughput,
+                :mailbox_capacity
 
     # PostgreSQL EventStore settings
     attr_writer :postgres_host, :postgres_port,
@@ -45,6 +50,12 @@ module Rakka
     # 他のアクターに順番を譲る（小さいほど公平、大きいほど切り替えが減る）
     def throughput
       @throughput || ENV.fetch("RAKKA_THROUGHPUT", 5).to_i
+    end
+
+    # 1アクターのメールボックスに溜められるメッセージ数。超えた分は受け付けず
+    # MailboxFull になる。nil（デフォルト）は無制限
+    def mailbox_capacity
+      @mailbox_capacity || ENV["RAKKA_MAILBOX_CAPACITY"]&.to_i
     end
 
     def postgres_host
@@ -106,7 +117,8 @@ module Rakka
           shard_count: configuration.shard_count,
           passivate_after: configuration.passivate_after,
           max_actors_per_shard: configuration.max_actors_per_shard,
-          throughput: configuration.throughput
+          throughput: configuration.throughput,
+          mailbox_capacity: configuration.mailbox_capacity
         )
       end
     end

@@ -110,6 +110,7 @@ Rakka.configure do |c|
   c.passivate_after = 300          # アイドル何秒でメモリから解放するか
   c.max_actors_per_shard = 10_000  # 1シャードがメモリに保持する上限（LRU）
   c.throughput = 5                 # 1アクターを続けて処理するメッセージ数
+  c.mailbox_capacity = 1_000       # 1アクターに溜められるメッセージ数（デフォルト: 無制限）
 end
 ```
 
@@ -175,6 +176,8 @@ account = BankAccount.new("account-123", system: system)
 ### メールボックス
 
 メールボックスはアクターごとに持つ。シャードは、メッセージを持つアクターを順番に `throughput` 件ずつ処理する（Akkaのディスパッチャと同じ方式）。あるアクターにコマンドが大量に溜まっていても、同じシャードの他のアクターは `throughput` 件ごとに順番が回ってくる。同じアクター宛てのメッセージは必ず到着順に処理される。
+
+`mailbox_capacity` を設定すると、溜まっているメッセージがその数に達したアクターは新しいメッセージを受け付けなくなる。`send_command_sync` は `Rakka::MailboxFull` を上げ、`send_command` は警告を出して破棄する。処理が追いつかないときにメモリを使い続ける代わりに、送り手に過負荷を伝える。
 
 ### EventStore
 
