@@ -179,6 +179,26 @@ account = BankAccount.new("account-123", system: system)
 
 `mailbox_capacity` を設定すると、溜まっているメッセージがその数に達したアクターは新しいメッセージを受け付けなくなる。`send_command_sync` は `Rakka::MailboxFull` を上げ、`send_command` は警告を出して破棄する。処理が追いつかないときにメモリを使い続ける代わりに、送り手に過負荷を伝える。
 
+### アクター間メッセージング
+
+`handle` の中で他のアクターのハンドルを作り、非同期のコマンドを送れる。
+
+```ruby
+def deposit_later(amount) = send_command(Deposit[amount])
+
+def handle(command, state)
+  case command
+  in Transfer(to:, amount:)
+    Account.new(to).deposit_later(amount)
+    [:persist, MoneyTransferred[to, amount]]
+  end
+end
+```
+
+- 送信は、そのコマンドのイベントが永続化された後に行われる。コマンドが例外で落ちた場合は送られない
+- 配送は at-most-once。永続化の直後にプロセスが落ちると失われるので、確実に届けたい連携はイベントハンドラ（`Rakka.subscribe`）側で行う
+- `handle` の中で返信を待つこと（`send_command_sync` / `state`）はできない
+
 ### EventStore
 
 イベントの永続化を担当。追記は期待バージョンつきの楽観ロックで、競合したらシャードが状態を読み直してコマンドを判定し直す。

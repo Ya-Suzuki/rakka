@@ -6,6 +6,9 @@ class Counter < Rakka::PersistentActor
   Crash = Data.define
   KillShard = Data.define
   Sleep = Data.define(:seconds)
+  Forward = Data.define(:target_id, :amount)
+  ForwardThenCrash = Data.define(:target_id, :amount)
+  AskInside = Data.define(:target_id)
   Incremented = Data.define(:amount)
 
   # StandardErrorではないので、アクターではなくシャードRactorごと落とす
@@ -19,6 +22,9 @@ class Counter < Rakka::PersistentActor
   def increment_twice(amount) = send_command_sync(IncrementTwice[amount])
   def increment_async(amount = 1) = send_command(Increment[amount])
   def sleep_async(seconds) = send_command(Sleep[seconds])
+  def forward(target_id, amount) = send_command_sync(Forward[target_id, amount])
+  def forward_then_crash(target_id, amount) = send_command_sync(ForwardThenCrash[target_id, amount])
+  def ask_inside(target_id) = send_command_sync(AskInside[target_id])
   def crash! = send_command_sync(Crash[])
   def kill_shard! = send_command_sync(KillShard[])
   def count = state[:count]
@@ -33,6 +39,15 @@ class Counter < Rakka::PersistentActor
       [:persist, Incremented[amount], Incremented[amount]]
     in Sleep(seconds:)
       sleep seconds
+      [:noop]
+    in Forward(target_id:, amount:)
+      Counter.new(target_id).increment_async(amount)
+      [:persist, Incremented[amount]]
+    in ForwardThenCrash(target_id:, amount:)
+      Counter.new(target_id).increment_async(amount)
+      raise "boom after send"
+    in AskInside(target_id:)
+      Counter.new(target_id).count
       [:noop]
     in Crash
       raise "boom"

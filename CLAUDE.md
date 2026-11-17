@@ -37,7 +37,7 @@ ruby examples/postgres_demo.rb
 | ファイル | 役割 |
 |---------|------|
 | `persistent_actor.rb` | 集約の定義（`initial_state` / `handle` / `apply_event`）と、コマンドを転送するだけの軽いハンドル。Ractorは持たない |
-| `actor_system.rb` | シャードRactorの起動、`crc32(stream_id) % shard_count` でのルーティング、返信待ちの管理 |
+| `actor_system.rb` | シャードRactorの起動、`crc32(stream_id) % shard_count` でのルーティング、返信待ちの管理、アクター間メッセージの配送 |
 | `shard.rb` | シャードRactor本体。アクターごとのメールボックスとスケジューリング、アクターの復元・コマンド処理・Passivation（アイドル/LRU）・アクター単位のクラッシュ処理 |
 | `supervisor.rb` | Ractor#monitorでシャードRactorの異常終了を検知して再起動 |
 | `event_store/base.rb` | EventStore共通API、`Serialization` |
@@ -71,6 +71,14 @@ EventBus (Main Thread) → subscribers
 - `Ractor.receive` にはノンブロッキング版が無いので、自分宛てに目印（`DRAINED`）を送り、それを受け取るまで読むことで「今届いている分」だけを振り分ける
 - `mailbox_capacity`（デフォルトnil=無制限）を超えたメッセージは受け付けない。同期呼び出しは `MailboxFull`、非同期は警告を出して破棄
 - `[:command]` / `[:get_state]` / `[:passivate]` はメールボックス経由（アクターごとに到着順）。`[:tick]` / `[:stats]` / `[:stop]` はシャード宛てで即時処理
+
+### アクター間メッセージング
+
+- `handle` の中で他のアクターのハンドルを作り、`send_command` を使うメソッドを呼ぶと送れる（`OtherActor.new(id).do_later(...)`）
+- シャードRactor内では、ハンドルの送信先は `Ractor.current[:rakka_context]`（そのシャードの `Shard::Outbox`）になる
+- Outboxに溜めたメッセージは、イベントの永続化が成功した後に router port → メインRactorのrouterスレッド → 宛先シャードの順で配送される。競合でやり直した回・クラッシュした回の分は送られない
+- 配送は at-most-once（永続化の直後にプロセスが落ちると失われる）。確実に届けたい連携はイベントを購読する側（EventBus）で行う
+- `handle` の中から `send_command_sync` / `state` は使えない（シャードが止まるため例外になる）。`apply_event` / `initial_state` からは送れない
 
 ### EventStoreとJournal
 
