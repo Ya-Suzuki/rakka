@@ -1,7 +1,11 @@
 /*
  * 落花: Ruby の宝石のような花びらが舞いながら散り、ページの底（フッターの下）に積もる。
  * 途中を読んでいる間は画面の下を通り抜けて見えなくなり、最後までスクロールすると山が見える。
- * フッターの一言を押すと、全部が巻き戻ってから同じように散り直し、同じ場所に積もる。
+ *
+ * フッターの一言を押すと、Rakka が集約を復元するのと同じ手順で山を作り直す:
+ *   1. 巻き戻し（状態を捨てる）: 全部が舞い上がる
+ *   2. スナップショットから復元: 10枚ごとの区切りまでの山が、その場に戻る
+ *   3. 以降のイベントを再生: 区切りの後に散った花びらだけが、元の間隔・元の速さで散り直す
  *
  * 花びらの動きは「生まれた時刻と乱数から決まる値（イベント）」と「経過時間」だけで
  * 決まる純粋な関数（place）なので、巻き戻しも再生も、時間を動かすだけでできる。
@@ -19,7 +23,8 @@ const HEAP_MAX = 40;      // 山の高さの上限（px）
 const PILE_MAX = 180;     // 積もらせる枚数の上限。超えたら画面の外へ落ちて消える
 const REWIND = 2.4;       // 巻き戻しにかける秒数（全体）
 const LIFT = 1.1;         // 一枚が舞い上がるのにかける秒数。最後に散ったものから順に、ずらして上がる
-const REPLAY_SPAN = 4.5;  // 再生で、最後の花びらが散り始めるまでの秒数
+const SNAPSHOT_EVERY = 10; // スナップショットを取る間隔（散った枚数）
+const RESTORE = 0.7;      // スナップショットの山が戻るのにかける秒数
 const SIZE = 22;          // 花びらの大きさ（幅 1.24 に掛ける px）
 const CAPACITY = 256;
 
@@ -76,9 +81,10 @@ function start() {
   let petals = [];
   let heap = [];
   let nextSpawn = 0;
-  let mode = 'live';
+  let mode = 'live';       // live / rewind / restore / replay
   let modeStart = 0;
-  let replayOffsets = null;
+  let snapshotAt = 0;      // スナップショットに含まれる花びらの数（散った順の先頭から）
+  let replayFrom = 0;      // 再生の基準（スナップショット後の最初の花びらが散った時刻）
 
   const countPiled = () => petals.reduce((n, p) => n + (p.piled ? 1 : 0), 0);
 
@@ -143,7 +149,17 @@ function start() {
       const q = ease(Math.max(0, Math.min(1, (clock - modeStart - p.rewindDelay) / LIFT)));
       return p.rewindFrom * (1 - q);
     }
-    return clock - modeStart - replayOffsets[i];
+    if (i < snapshotAt) return p.dur;                 // スナップショットに含まれる: 積もった状態
+    if (mode === 'restore') return -1;                // 以降のイベントは、まだ起きていない
+    return clock - modeStart - (p.born - replayFrom); // 元の間隔・元の速さで再生
+  }
+
+  // スナップショットの山が戻るときの大きさ（0 → 1）。散った順に少しずつずらす
+  function appear(i) {
+    if (mode !== 'restore' || i >= snapshotAt) return 1;
+    const delay = (RESTORE * 0.5) * i / Math.max(1, snapshotAt - 1);
+    const q = Math.max(0, Math.min(1, (clock - modeStart - delay) / (RESTORE * 0.5)));
+    return 1 - Math.pow(1 - q, 3);
   }
 
   const dummy = new Object3D();
@@ -163,7 +179,9 @@ function start() {
       if (!s.visible || s.y > H + 60 || s.y < -80) continue;
       dummy.position.set(s.x, -s.y, 0);
       dummy.rotation.set(s.rotX, s.rotY, s.rotZ, 'ZXY');
-      dummy.scale.setScalar(SIZE * p.scale);
+      const a = appear(i);
+      if (a <= 0) continue;
+      dummy.scale.setScalar(SIZE * p.scale * a);
       dummy.updateMatrix();
       gems.setMatrixAt(count, dummy.matrix);
       gems.setColorAt(count, p.color);
@@ -176,8 +194,9 @@ function start() {
       renderer.render(scene, camera);
     }
 
-    if (mode === 'rewind' && clock - modeStart >= REWIND + 0.15) startReplay();
-    if (mode === 'replay' && done) finishReplay();
+    if (mode === 'rewind' && clock - modeStart >= REWIND + 0.15) startRestore();
+    else if (mode === 'restore' && clock - modeStart >= RESTORE) startReplay();
+    else if (mode === 'replay' && done) finishReplay();
     if (mode === 'live') {
       while (clock >= nextSpawn) {
         spawn(nextSpawn);
@@ -201,16 +220,24 @@ function start() {
     document.documentElement.classList.add('is-replaying');
   }
 
+  // スナップショットは、先頭から10枚ごとの区切りのうち、全部が積もり終えている最後のもの
+  function startRestore() {
+    let landed = 0;
+    while (landed < petals.length && petals[landed].rewindFrom >= petals[landed].dur) landed++;
+    snapshotAt = Math.floor(landed / SNAPSHOT_EVERY) * SNAPSHOT_EVERY;
+    mode = 'restore';
+    modeStart = clock;
+  }
+
   function startReplay() {
-    const first = petals[0].born, last = petals[petals.length - 1].born;
-    const k = last > first ? Math.min(1, REPLAY_SPAN / (last - first)) : 1;
-    replayOffsets = petals.map((p) => (p.born - first) * k);
+    replayFrom = snapshotAt < petals.length ? petals[snapshotAt].born : 0;
     mode = 'replay';
     modeStart = clock;
   }
 
   function finishReplay() {
-    petals.forEach((p, i) => { p.born = modeStart + replayOffsets[i]; });
+    // 再生した花びらの時刻を、今の時計に付け替えて live に戻す（積もる位置は変わらない）
+    for (let i = snapshotAt; i < petals.length; i++) petals[i].born = modeStart + (petals[i].born - replayFrom);
     nextSpawn = clock + 2;
     mode = 'live';
     document.documentElement.classList.remove('is-replaying');
@@ -276,9 +303,9 @@ function start() {
       frame();
     },
     state() {
-      const flying = mode === 'live' ? petals.filter((p) => { const t = clock - p.born; return t >= 0 && t < p.dur; }).length : null;
+      const flying = petals.filter((p, i) => { const t = mode === 'rewind' ? -1 : elapsed(p, i); return t >= 0 && t < p.dur; }).length;
       return {
-        mode, count: petals.length, piled: countPiled(), flying, drawn: gems.count,
+        mode, count: petals.length, piled: countPiled(), flying, drawn: gems.count, snapshotAt,
         // 積もる位置（ページ上の座標。スクロール位置によらない）
         rests: petals.filter((p) => p.piled).map((p) => [Math.round((p.x + p.drift) * W), Math.round(docH - 10 - p.lift)]),
         // 画面の下端 80px に描かれている、積もった花びらの数
