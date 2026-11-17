@@ -12,7 +12,8 @@ module Rakka
     attr_reader :event_store, :shard_count
 
     def initialize(event_store:, shard_count: Etc.nprocessors, passivate_after: 300,
-                   max_actors_per_shard: 10_000, throughput: 5, max_restarts: 3, within: 60,
+                   max_actors_per_shard: 10_000, throughput: 5, mailbox_capacity: nil,
+                   max_restarts: 3, within: 60,
                    publisher_port: Rakka.publisher_port)
       @event_store = event_store
       @shard_count = shard_count
@@ -30,7 +31,7 @@ module Rakka
         @supervisor.supervise(index) do
           Shard.spawn(index, connector, publisher_port,
                       passivate_after: passivate_after, max_actors: max_actors_per_shard,
-                      throughput: throughput)
+                      throughput: throughput, mailbox_capacity: mailbox_capacity)
         end
       end
 
@@ -41,7 +42,8 @@ module Rakka
 
     # コマンドを送って結果を待つ
     #   => [:ok, event] | [:rejected, reason] | [:noop]
-    # handle / apply_event が例外を投げたら ActorCrashed
+    # handle / apply_event が例外を投げたら ActorCrashed、
+    # アクターのメールボックスが満杯なら MailboxFull
     def ask(actor_class, id, command)
       stream_id = actor_class.stream_id(id)
 
@@ -94,6 +96,7 @@ module Rakka
         shard_count: shard_count,
         active_count: shards.sum { |s| s[:active_count] },
         queued: shards.sum { |s| s[:queued] },
+        dropped: shards.sum { |s| s[:dropped] },
         restarts: @supervisor.children.transform_values { |c| c[:restart_count] },
         shards: shards
       }
@@ -145,6 +148,8 @@ module Rakka
       case port.receive
       in [:shard_crashed]
         raise ShardUnavailable, "shard crashed while processing the request"
+      in [:mailbox_full, stream_id]
+        raise MailboxFull, "#{stream_id}: mailbox is full"
       in reply
         reply
       end

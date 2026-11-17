@@ -69,6 +69,7 @@ EventBus (Main Thread) → subscribers
 - メールボックスはアクターごと。`@mailboxes`（stream_id => 未処理メッセージ）は空になったら消すので、Hashの挿入順がそのままランキューになる
 - シャードは先頭のアクターを `throughput` 件（デフォルト5）処理し、残りがあれば列の最後に回す。1つのアクターにコマンドが溜まっても他のアクターを待たせ続けない
 - `Ractor.receive` にはノンブロッキング版が無いので、自分宛てに目印（`DRAINED`）を送り、それを受け取るまで読むことで「今届いている分」だけを振り分ける
+- `mailbox_capacity`（デフォルトnil=無制限）を超えたメッセージは受け付けない。同期呼び出しは `MailboxFull`、非同期は警告を出して破棄
 - `[:command]` / `[:get_state]` / `[:passivate]` はメールボックス経由（アクターごとに到着順）。`[:tick]` / `[:stats]` / `[:stop]` はシャード宛てで即時処理
 
 ### EventStoreとJournal

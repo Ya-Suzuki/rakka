@@ -140,6 +140,32 @@ RSpec.describe Rakka::ActorSystem do
     end
   end
 
+  describe "bounded mailbox" do
+    let(:system) { described_class.new(event_store: event_store, shard_count: 1, mailbox_capacity: 3) }
+
+    it "refuses messages beyond the capacity without affecting other actors" do
+      counter("blocker").sleep_async(0.2)
+      sleep 0.05 # blockerの処理が始まるのを待つ
+      5.times { counter("a").increment_async } # 4件目と5件目は溢れる
+
+      expect { counter("a").increment }.to raise_error(Rakka::MailboxFull, /Counter-a/)
+      expect(counter("b").increment).to eq([:ok, Counter::Incremented[1]])
+
+      expect(counter("a").count).to eq(3)
+      expect(system.stats).to include(dropped: 3, queued: 0)
+    end
+
+    it "accepts messages again once the backlog is processed" do
+      counter("blocker").sleep_async(0.1)
+      sleep 0.05
+      4.times { counter("a").increment_async }
+
+      expect(counter("blocker").count).to eq(0) # blockerの後ろに並ぶので、aの処理も済んでいる
+      expect(counter("a").increment).to eq([:ok, Counter::Incremented[1]])
+      expect(counter("a").count).to eq(4)
+    end
+  end
+
   describe "event publishing" do
     it "publishes persisted events with metadata" do
       port = Ractor::Port.new
