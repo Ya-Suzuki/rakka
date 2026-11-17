@@ -123,19 +123,10 @@
         {%- endfor %}
       </div>
     </section>
-
-    <section class="name{% if t.name.vertical %} name--vertical{% endif %}" aria-label="Rakka">
-      <div class="name__petals" aria-hidden="true">
-        <svg style="--x:8%;--y:18%;--r:-30deg;--s:1"><use href="#petal"/></svg>
-        <svg style="--x:22%;--y:72%;--r:50deg;--s:.7"><use href="#petal"/></svg>
-        <svg style="--x:88%;--y:22%;--r:120deg;--s:.85"><use href="#petal"/></svg>
-        <svg style="--x:94%;--y:70%;--r:-140deg;--s:.6"><use href="#petal"/></svg>
-      </div>
-      <p class="name__poem">{% for line in t.name.poem %}<span>{{ line }}</span>{% endfor %}</p>
-    </section>
   </main>
 
   <footer class="footer">
+    <p class="footer__poem{% if t.name.vertical %} footer__poem--vertical{% endif %}">{% for line in t.name.poem %}<span>{{ line }}</span>{% endfor %}</p>
     <p>{{ t.footer }}<br>MIT License &middot; <a href="https://github.com/Ya-Suzuki/rakka">GitHub</a> &middot; <a href="{{ t.switch.href | relative_url }}" hreflang="{{ t.switch.lang }}" lang="{{ t.switch.lang }}">{{ t.switch.label }}</a></p>
   </footer>
 </body>
