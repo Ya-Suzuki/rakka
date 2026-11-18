@@ -1,6 +1,7 @@
 /*
  * 落花: 桜の花びらが舞いながら散り、ページの底（フッターの下）に積もる。
  * 途中を読んでいる間は画面の下を通り抜けて見えなくなり、最後までスクロールすると山が見える。
+ * 積もった花びらはしばらくすると消える（散って、積もって、消えるまでが一枚の一生）。
  *
  * フッターの一言を押すと、イベントを最初から再生して山を作り直す:
  *   1. 巻き戻し: 全部の花びらが、新しいものから順に舞い上がる（状態を捨てる）
@@ -19,7 +20,9 @@
 const BINS = 72;          // 積もる位置の区切り（画面幅によらず一定。幅を変えても同じ山になる）
 const LAYER = 3.4;        // 1枚積もるごとに山が高くなる量（px）
 const HEAP_MAX = 40;      // 山の高さの上限（px）
-const PILE_MAX = 90;      // 積もらせる枚数の上限。超えたら画面の外へ落ちて消える
+const PILE_MAX = 24;      // 一度に積もっている枚数の上限。超えたら画面の外へ落ちて消える
+const STAY = 150;         // 積もってから消え始めるまでの秒数（散って、積もって、消えるまでが一枚の一生）
+const FADE = 6;           // 消えるのにかける秒数
 const REWIND = 2.4;       // 巻き戻しにかける秒数（全体）
 const LIFT = 1.2;         // 一枚が舞い上がるのにかける秒数。最後に散ったものから順に、ずらして上がる
 const MAX_SPEED = 50;     // 早送りの上限（倍）。これより速いと、落ちる途中が見えず下端に突然現れて見える
@@ -48,14 +51,13 @@ function start() {
   let W = 0, H = 0, docH = 0, scrollY = 0;
   let clock = 0;
   let petals = [];
-  let heap = [];
   let nextSpawn = 0;
   let mode = 'live';       // live / rewind / replay
   let modeStart = 0;
   let replayFrom = 0;      // 再生の基準（最初の花びらが散った時刻）
   let replayLength = 0;    // 再生する元の時間の長さ（最初の花びらから、最後の花びらが積もるまで）
 
-  const countPiled = () => petals.reduce((n, p) => n + (p.piled ? 1 : 0), 0);
+  const countPiled = () => petals.reduce((n, p) => n + (p.piled && clock - p.born < life(p) ? 1 : 0), 0);
 
   function spawn(born) {
     // 風は右へ吹いている。落ちる先は右下に寄り、吹き溜まりになる
@@ -81,12 +83,25 @@ function start() {
       jitter: (random() - 0.5) * 6,
       piled: false, lift: 0
     };
-    if (countPiled() < PILE_MAX) {
-      p.piled = true;
-      p.lift = Math.min(heap[bin] || 0, HEAP_MAX) + p.jitter;
-      heap[bin] = (heap[bin] || 0) + LAYER * scale;
-    }
+    p.bin = bin;
+    settle(p, petals);
     petals.push(p);
+  }
+
+  // 一生の長さ（経過時間）。積もらない花びらは落ちきったら、積もったものは消えきったら終わる
+  const life = (p) => p.dur + (p.piled ? STAY + FADE : 0);
+
+  // 積もるかどうかと高さは、それより前に散って、着地の時点でまだ残っている花びらだけで決まる
+  function settle(p, prior) {
+    const lands = p.born + p.dur;
+    let count = 0, height = 0;
+    for (const q of prior) {
+      if (!q.piled || q.born + life(q) <= lands) continue;
+      count++;
+      if (q.bin === p.bin) height += LAYER * q.scale;
+    }
+    p.piled = count < PILE_MAX;
+    p.lift = p.piled ? Math.min(height, HEAP_MAX) + p.jitter : 0;
   }
 
   const ease = (q) => (q < 0.5 ? 4 * q * q * q : 1 - Math.pow(-2 * q + 2, 3) / 2);
@@ -141,7 +156,7 @@ function start() {
   }
 
   // 花びら一枚を描く。翻る（rotY）と横幅が縮み、裏返ると裏の色になる
-  function draw(p, s) {
+  function draw(p, s, fade) {
     const flip = Math.cos(s.rotY);
     const k = SIZE * p.scale;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -149,13 +164,13 @@ function start() {
     ctx.rotate(s.rotZ);
     ctx.scale(k * Math.max(0.08, Math.abs(flip)), k);
     ctx.translate(-20, -26);
-    ctx.globalAlpha = p.alpha;
+    ctx.globalAlpha = p.alpha * fade;
     const front = flip >= 0;
     ctx.fillStyle = front ? FRONT[0] : BACK[0];
     ctx.fill(LEFT);
     ctx.fillStyle = front ? FRONT[1] : BACK[1];
     ctx.fill(RIGHT);
-    ctx.globalAlpha = 0.25;
+    ctx.globalAlpha = 0.25 * fade;
     ctx.fillStyle = '#fff';
     ctx.fill(FACET);
   }
@@ -180,7 +195,9 @@ function start() {
       if (!paint) continue;
       const s = place(p, t);
       if (!s.visible || s.y > H + 40 || s.y < -60) continue;
-      draw(p, s);
+      const fade = p.piled ? 1 - Math.max(0, Math.min(1, (t - p.dur - STAY) / FADE)) : 1;
+      if (fade <= 0) continue;
+      draw(p, s, fade);
       drawn++;
     }
 
@@ -191,14 +208,15 @@ function start() {
         spawn(nextSpawn);
         nextSpawn += 6.5 + random() * 5; // 同時に舞うのは2枚ほど
       }
-      petals = petals.filter((p) => p.piled || clock - p.born < p.dur); // 積もらない花びらは落ちきったら捨てる
+      petals = petals.filter((p) => clock - p.born < life(p)); // 一生を終えた花びらは捨てる
     }
   }
 
   // --- 巻き戻して、同じイベントを再生する ---
   function rewind() {
     if (mode !== 'live' || !petals.length) return;
-    petals = petals.filter((p) => p.piled || clock - p.born < p.dur);
+    petals = petals.filter((p) => clock - p.born < life(p));
+    if (!petals.length) return;
     const n = petals.length;
     petals.forEach((p, i) => {
       p.rewindFrom = Math.min(clock - p.born, p.dur);
@@ -250,13 +268,7 @@ function start() {
   // 開いた時点で、何枚かはもう宙にある
   for (let n = 0; n < 4; n++) spawn(-n * 4.5 - random() * 2);
   petals.sort((a, b) => a.born - b.born);
-  heap = [];
-  petals.forEach((p) => { // 並べ替えた順番が散った順番。その順に山へ載せ直す
-    if (!p.piled) return;
-    const bin = Math.floor((p.x + p.drift) * BINS);
-    p.lift = Math.min(heap[bin] || 0, HEAP_MAX) + p.jitter;
-    heap[bin] = (heap[bin] || 0) + LAYER * p.scale;
-  });
+  petals.forEach((p, i) => settle(p, petals.slice(0, i))); // 並べ替えた順番が散った順番。その順に山へ載せ直す
   nextSpawn = 1.5;
 
   document.body.insertBefore(canvas, document.body.firstChild);
