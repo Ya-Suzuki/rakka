@@ -29,10 +29,19 @@
 <body>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
     <defs>
-      <!-- 花びら。輪郭は Ruby のロゴの比率に、上辺の桜の浅い切れ込み（assets/js/petals.js と同じ形） -->
-      <symbol id="petal" viewBox="0 0 48 40">
-        <path fill="#b3232e" d="M24 3.46 21.2 0.77 12 0 4 0.77 0 4.62 1.2 11.54 6 20 13.2 30.38 24 40Z"/>
-        <path fill="#c93a45" d="M24 3.46 26.8 0.77 36 0 44 0.77 48 4.62 46.8 11.54 42 20 34.8 30.38 24 40Z"/>
+      <linearGradient id="petal-shade" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#d2404c"/>
+        <stop offset="1" stop-color="#8f1720"/>
+      </linearGradient>
+      <linearGradient id="petal-light" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#f6c2bd"/>
+        <stop offset="1" stop-color="#e3646d"/>
+      </linearGradient>
+      <!-- 桜の花びら。左右で色を変え、Ruby の宝石のような面をつける -->
+      <symbol id="petal" viewBox="0 0 40 52">
+        <path fill="url(#petal-shade)" d="M20 52C6 40 0 26 4 12 7 4 14 1 18 6l2 4Z"/>
+        <path fill="url(#petal-light)" d="M20 10l2-4c4-5 11-2 14 6 4 14-2 28-16 40Z"/>
+        <path fill="#fff" opacity=".28" d="M20 10l-7 11 7 15Z"/>
       </symbol>
     </defs>
   </svg>

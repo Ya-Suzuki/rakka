@@ -1,5 +1,5 @@
 /*
- * 落花: Ruby のロゴの形をした花びらが舞いながら散り、ページの底（フッターの下）に積もる。
+ * 落花: 桜の花びらが舞いながら散り、ページの底（フッターの下）に積もる。
  * 途中を読んでいる間は画面の下を通り抜けて見えなくなり、最後までスクロールすると山が見える。
  *
  * フッターの一言を押すと、イベントを最初から再生して山を作り直す:
@@ -25,13 +25,14 @@ const LIFT = 1.2;         // 一枚が舞い上がるのにかける秒数。最
 const MAX_SPEED = 50;     // 早送りの上限（倍）。これより速いと、落ちる途中が見えず下端に突然現れて見える
 const RAMP = 1.2;         // 等速と上限の間を加速・減速するのにかける秒数
 const CATCH_UP = 10;      // 最後に等速で再生する長さ（元の時間で秒）
-const SIZE = 26;          // 花びらの幅（px）
+const SIZE = 0.62;        // 花びらの大きさ（40 × 52 の形に掛ける倍率）
 
-// 輪郭は Ruby のロゴの比率（48 × 40）に、上辺の桜の浅い切れ込み。左右で色を少し変えるだけの平面
-const LEFT = new Path2D('M24 3.46 21.2 0.77 12 0 4 0.77 0 4.62 1.2 11.54 6 20 13.2 30.38 24 40Z');
-const RIGHT = new Path2D('M24 3.46 26.8 0.77 36 0 44 0.77 48 4.62 46.8 11.54 42 20 34.8 30.38 24 40Z');
-const FRONT = ['#b3232e', '#c93a45']; // 表
-const BACK = ['#d0505a', '#c44450'];  // 裏（少し淡い）
+// 桜の花びら。左右で色を変え、Ruby の宝石のような面をひとつだけつける（40 × 52）
+const LEFT = new Path2D('M20 52C6 40 0 26 4 12 7 4 14 1 18 6l2 4Z');
+const RIGHT = new Path2D('M20 10l2-4c4-5 11-2 14 6 4 14-2 28-16 40Z');
+const FACET = new Path2D('M20 10l-7 11 7 15Z');
+const FRONT = ['#b42833', '#ee9aa0']; // 表（濃い面・明るい面）
+const BACK = ['#e9868d', '#c23a45'];  // 裏は濃淡が入れ替わる
 
 function start() {
   const canvas = document.createElement('canvas');
@@ -76,7 +77,7 @@ function start() {
       restRot: random() * Math.PI * 2,
       restYaw: (random() - 0.5) * 1.6 + (random() < 0.4 ? Math.PI : 0),
       restPitch: (random() - 0.5) * 1.1,
-      alpha: 0.9 + shade * 0.1, // 花びらごとのわずかな濃淡
+      alpha: 0.88 + shade * 0.07, // 花びらごとのわずかな濃淡
       jitter: (random() - 0.5) * 6,
       piled: false, lift: 0
     };
@@ -142,19 +143,21 @@ function start() {
   // 花びら一枚を描く。翻る（rotY）と横幅が縮み、裏返ると裏の色になる
   function draw(p, s) {
     const flip = Math.cos(s.rotY);
-    const tilt = 0.7 + 0.3 * Math.abs(Math.cos(s.rotX));
-    const k = SIZE * p.scale / 48;
+    const k = SIZE * p.scale;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(s.x, s.y);
     ctx.rotate(s.rotZ);
-    ctx.scale(k * (Math.abs(flip) < 0.12 ? 0.12 * Math.sign(flip || 1) : flip), k * tilt);
-    ctx.translate(-24, -20);
+    ctx.scale(k * Math.max(0.08, Math.abs(flip)), k);
+    ctx.translate(-20, -26);
     ctx.globalAlpha = p.alpha;
     const front = flip >= 0;
     ctx.fillStyle = front ? FRONT[0] : BACK[0];
     ctx.fill(LEFT);
     ctx.fillStyle = front ? FRONT[1] : BACK[1];
     ctx.fill(RIGHT);
+    ctx.globalAlpha = 0.25;
+    ctx.fillStyle = '#fff';
+    ctx.fill(FACET);
   }
 
   let drawn = 0;
