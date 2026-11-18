@@ -12,16 +12,12 @@
   <link rel="icon" href="{{ '/assets/images/rakkan.svg' | relative_url }}" type="image/svg+xml">
   <link rel="stylesheet" href="{{ '/assets/css/landing.css' | relative_url }}">
   <script>
-    /* 舞って積もる花びら（three.js）。動きを減らす設定のときと WebGL が使えないときは
-       読み込まない（ヒーローの静止した花びらが残る） */
+    /* 舞って積もる花びら。動きを減らす設定のときは読み込まない（ヒーローの静止した花びらが残る） */
     (function () {
       if (!window.matchMedia || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-      try {
-        var c = document.createElement('canvas');
-        if (!(c.getContext('webgl2') || c.getContext('webgl'))) return;
-      } catch (e) { return; }
+      if (!window.Path2D) return;
       var s = document.createElement('script');
-      s.type = 'module';
+      s.defer = true;
       s.src = '{{ '/assets/js/petals.js' | relative_url }}';
       document.head.appendChild(s);
     })();
@@ -33,32 +29,10 @@
 <body>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
     <defs>
-      <!-- 花びら。輪郭は Ruby のロゴに寄せ、上辺に桜の浅い切れ込み。表面は宝石のカット（_petals/shape.py が作る。立体を正面から見た形） -->
+      <!-- 花びら。輪郭は Ruby のロゴの比率に、上辺の桜の浅い切れ込み（assets/js/petals.js と同じ形） -->
       <symbol id="petal" viewBox="0 0 48 40">
-        <g stroke="rgba(255,255,255,.2)" stroke-width=".35" stroke-linejoin="round">
-        <polygon fill="#d44d58" points="24,3.46 26.8,0.77 24,12.31"/>
-        <polygon fill="#de5964" points="26.8,0.77 36,0 36.8,10.77"/>
-        <polygon fill="#d24753" points="26.8,0.77 36.8,10.77 24,12.31"/>
-        <polygon fill="#e25d68" points="36,0 44,0.77 36.8,10.77"/>
-        <polygon fill="#e25b66" points="44,0.77 48,4.62 36.8,10.77"/>
-        <polygon fill="#db4f5a" points="48,4.62 46.8,11.54 36.8,10.77"/>
-        <polygon fill="#c43743" points="36.8,10.77 46.8,11.54 24,25.38"/>
-        <polygon fill="#be2f3b" points="46.8,11.54 42,20 24,25.38"/>
-        <polygon fill="#ac222d" points="42,20 34.8,30.38 24,25.38"/>
-        <polygon fill="#961824" points="34.8,30.38 24,40 24,25.38"/>
-        <polygon fill="#be303c" points="24,12.31 36.8,10.77 24,25.38"/>
-        <polygon fill="#d44d58" points="24,3.46 21.2,0.77 24,12.31"/>
-        <polygon fill="#de5964" points="21.2,0.77 12,0 11.2,10.77"/>
-        <polygon fill="#d24753" points="21.2,0.77 11.2,10.77 24,12.31"/>
-        <polygon fill="#e25d68" points="12,0 4,0.77 11.2,10.77"/>
-        <polygon fill="#e25b66" points="4,0.77 0,4.62 11.2,10.77"/>
-        <polygon fill="#db4f5a" points="0,4.62 1.2,11.54 11.2,10.77"/>
-        <polygon fill="#c43743" points="11.2,10.77 1.2,11.54 24,25.38"/>
-        <polygon fill="#be2f3b" points="1.2,11.54 6,20 24,25.38"/>
-        <polygon fill="#ac222d" points="6,20 13.2,30.38 24,25.38"/>
-        <polygon fill="#961824" points="13.2,30.38 24,40 24,25.38"/>
-        <polygon fill="#be303c" points="24,12.31 11.2,10.77 24,25.38"/>
-        </g>
+        <path fill="#b3232e" d="M24 3.46 21.2 0.77 12 0 4 0.77 0 4.62 1.2 11.54 6 20 13.2 30.38 24 40Z"/>
+        <path fill="#c93a45" d="M24 3.46 26.8 0.77 36 0 44 0.77 48 4.62 46.8 11.54 42 20 34.8 30.38 24 40Z"/>
       </symbol>
     </defs>
   </svg>
