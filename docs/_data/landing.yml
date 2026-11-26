@@ -42,7 +42,6 @@ ja:
   name:
     poem: [散っても, また咲く]
     vertical: true
-    replay_label: 花びらを巻き戻して、もう一度散らす
   footer: Rakka = <b>Ra</b>ctor + Ak<b>ka</b>
   nav_label: サイト
 
@@ -93,6 +92,5 @@ en:
   name:
     poem: [Petals fall., The tree remains.]
     vertical: false
-    replay_label: Rewind the petals and let them fall again
   footer: Rakka = <b>Ra</b>ctor + Ak<b>ka</b>
   nav_label: Site

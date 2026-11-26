@@ -35,18 +35,16 @@ body {
 
 ::selection { background: var(--sakura); color: var(--sumi); }
 
-/* 背景: 長谷川等伯「松林図屏風」左隻の墨だけを取り出したもの（パブリックドメイン）。
-   紙の色はページの和紙に任せ、上へ行くほど霞に溶かす */
-body::before {
-  content: "";
+/* 背景の動画（屏風に花びらが散る）。和紙の上に薄く重ねて、文字の邪魔をしない */
+.byobu {
   position: fixed;
   inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
   z-index: -1;
   pointer-events: none;
-  background: url("../images/shorinzu.webp") 50% 100% / cover no-repeat;
-  opacity: 0.2;
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 45%);
-  mask-image: linear-gradient(to bottom, transparent 0, #000 45%);
+  opacity: 0.55;
 }
 
 a { color: var(--shu); text-decoration-color: rgba(173, 31, 42, 0.35); text-underline-offset: 0.2em; }
@@ -218,41 +216,7 @@ code {
 .install { margin: 0; max-width: 100%; overflow-x: auto; }
 .install code { background: rgba(239, 229, 214, 0.75); font-size: 0.8rem; white-space: nowrap; }
 
-/* --- 花びら --- */
-.petals { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
-
-.petal {
-  position: absolute;
-  top: -60px;
-  left: var(--x);
-  width: calc(26px * var(--s));
-  height: calc(34px * var(--s));
-  animation: fall var(--d) linear var(--delay) infinite;
-  will-change: transform;
-}
-
-.petal svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-  filter: drop-shadow(0 6px 6px rgba(143, 23, 32, 0.12));
-  animation: flutter calc(var(--d) / 4) ease-in-out var(--delay) infinite alternate;
-}
-
-@keyframes fall {
-  from { transform: translate3d(0, 0, 0) rotate(0deg); }
-  to   { transform: translate3d(-12vw, calc(min(86vh, 780px) + 120px), 0) rotate(var(--r)); }
-}
-
-@keyframes flutter {
-  from { transform: rotateX(0deg) rotateY(-30deg) translateX(-14px); }
-  to   { transform: rotateX(55deg) rotateY(40deg) translateX(16px); }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .petal { top: var(--y); animation: none; transform: rotate(var(--r)); opacity: 0.85; }
-  .petal svg { animation: none; }
   .btn, .btn::after { transition: none; }
 }
 
@@ -517,19 +481,3 @@ html[lang="ja"] .lead, html[lang="ja"] p, html[lang="ja"] li, html[lang="ja"] .p
 .footer__poem--vertical span { display: block; }
 .footer__poem--vertical span + span { margin-left: 0; margin-top: 1.2em; }
 
-/* --- 散り続けて積もる花びら（assets/js/petals.js）。本文の後ろに描く --- */
-/* 表示の大きさを画面に合わせる。指定しないと、高解像度の画面では内部の画素数
-   （画面の2倍）がそのまま大きさになり、2倍に引き伸ばされてぼやける */
-.petal-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
-.petal-canvas-on .petals { display: none; } /* キャンバスがあるときは、ヒーローの CSS の花びらは使わない */
-.footer { position: relative; z-index: 2; }
-
-/* 一言は押せるが、押せることは主張しない */
-.footer__poem[role="button"] { cursor: pointer; transition: color 0.3s ease; border-radius: 4px; }
-.footer__poem[role="button"]:hover,
-.is-replaying .footer__poem { color: var(--shu); }
-.footer__poem[role="button"]:focus-visible { outline: 1px solid var(--shu); outline-offset: 6px; }
-
-/* 花びらはフッターの下に積もるので、文字が埋もれないよう下を空けておく */
-.footer { padding-bottom: 104px; }
-@media (max-width: 640px) { .footer { padding-bottom: 88px; } }
