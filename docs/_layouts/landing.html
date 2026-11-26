@@ -17,19 +17,14 @@
 </head>
 <body>
   <!-- 背景: 屏風に花びらが散り、水面に落ちて波紋が広がる（_video/ の Remotion で作る）。
-       動きを減らす設定のときは再生せず、最初のコマだけを見せる -->
-  <video class="byobu" muted loop playsinline preload="auto" aria-hidden="true" tabindex="-1"
+       もう1本は同じ動画を逆向きにしたもの。フッターの一言を押すと、逆向きの動画で最初まで巻き戻す -->
+  <video class="byobu byobu--play" muted loop playsinline preload="auto" aria-hidden="true" tabindex="-1"
          poster="{{ '/assets/video/rakka.jpg' | relative_url }}">
     <source src="{{ '/assets/video/rakka.mp4' | relative_url }}" type="video/mp4">
   </video>
-  <script>
-    (function () {
-      var v = document.querySelector('video.byobu');
-      if (!v || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) return;
-      var p = v.play();
-      if (p && p.catch) p.catch(function () {});
-    })();
-  </script>
+  <video class="byobu byobu--rewind" muted playsinline preload="none" aria-hidden="true" tabindex="-1">
+    <source src="{{ '/assets/video/rakka-rewind.mp4' | relative_url }}" type="video/mp4">
+  </video>
 
   <header class="topbar">
     <a class="brand" href="{{ page.url | relative_url }}"><span class="rakkan" aria-hidden="true">落花</span>Rakka</a>
@@ -114,8 +109,9 @@
   </main>
 
   <footer class="footer">
-    <p class="footer__poem{% if t.name.vertical %} footer__poem--vertical{% endif %}">{% for line in t.name.poem %}<span>{{ line }}</span>{% endfor %}</p>
+    <p class="footer__poem{% if t.name.vertical %} footer__poem--vertical{% endif %}" data-replay-label="{{ t.name.replay_label }}">{% for line in t.name.poem %}<span>{{ line }}</span>{% endfor %}</p>
     <p>{{ t.footer }}<br>MIT License &middot; <a href="https://github.com/Ya-Suzuki/rakka">GitHub</a> &middot; <a href="{{ t.switch.href | relative_url }}" hreflang="{{ t.switch.lang }}" lang="{{ t.switch.lang }}">{{ t.switch.label }}</a></p>
   </footer>
+  <script src="{{ '/assets/js/byobu.js' | relative_url }}"></script>
 </body>
 </html>

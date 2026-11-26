@@ -46,6 +46,16 @@ body {
   pointer-events: none;
   opacity: 0.55;
 }
+/* 巻き戻しの間だけ、逆向きの動画を見せる（同じ絵の鏡写しなので、入れ替えても継ぎ目は出ない） */
+.byobu--rewind { visibility: hidden; }
+.is-rewinding .byobu--rewind { visibility: visible; }
+.is-rewinding .byobu--play { visibility: hidden; }
+
+/* フッターの一言は巻き戻しのボタン。押せることは主張しない */
+.footer__poem[role="button"] { cursor: pointer; transition: color 0.3s ease; border-radius: 4px; }
+.footer__poem[role="button"]:hover,
+.is-rewinding .footer__poem { color: var(--shu); }
+.footer__poem[role="button"]:focus-visible { outline: 1px solid var(--shu); outline-offset: 6px; }
 
 a { color: var(--shu); text-decoration-color: rgba(173, 31, 42, 0.35); text-underline-offset: 0.2em; }
 a:hover { text-decoration-color: var(--shu); }

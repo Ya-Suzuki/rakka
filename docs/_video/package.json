@@ -4,7 +4,7 @@
   "description": "トップページの背景動画（屏風に花びらが散り、着地で波紋が広がる）",
   "scripts": {
     "studio": "remotion studio",
-    "render": "remotion render Rakka ../assets/video/rakka.mp4 --codec=h264 --crf=26 && remotion still Rakka out/poster.png --frame=0 && node poster.mjs"
+    "render": "remotion render Rakka ../assets/video/rakka.mp4 --codec=h264 --crf=26 && remotion still Rakka out/poster.png --frame=0 && node finish.mjs"
   },
   "dependencies": {
     "@remotion/cli": "4.0.539",

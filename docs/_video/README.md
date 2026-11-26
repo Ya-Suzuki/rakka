@@ -6,13 +6,17 @@
 - 花びら: 鉤勒（墨の細い輪郭）に胡粉と淡い臙脂を差した桜。紙の粒立ちと縁のにじみは SVG のフィルタで出す
 - 波紋: 手前が太く奥が細い墨の輪。かすれで途切れる
 
+## 巻き戻し
+
+フッターの一言（散っても／また咲く）を押すと、背景が最初まで巻き戻ってから流れ直す（`assets/js/byobu.js`）。ブラウザは動画を逆向きに再生できないので、逆向きに書き出したもう1本（`rakka-rewind.mp4`）に入れ替えて早送りで流す。絵は時刻だけで決まるので、逆向きの動画は元の鏡写しになり、入れ替えても継ぎ目は出ない（元の n コマ目は、逆向きの 719 - n コマ目）。
+
 ## 書き出し
 
 ```bash
 cd docs/_video
 npm install
 npm run studio   # ブラウザで確かめながら調整する
-npm run render   # ../assets/video/rakka.mp4 と、最初のコマの ../assets/video/rakka.jpg を書き出す
+npm run render   # ../assets/video/ に rakka.mp4、逆向きの rakka-rewind.mp4、最初のコマの rakka.jpg を書き出す
 ```
 
 Remotion が Chrome を取得できない環境では、`--browser-executable` で手元の Chrome（headless shell）を指定する。
