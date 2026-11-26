@@ -29,19 +29,22 @@
 <body>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
     <defs>
-      <linearGradient id="petal-shade" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#d2404c"/>
-        <stop offset="1" stop-color="#8f1720"/>
+      <!-- 桜の花びら。没骨（輪郭線を引かない）の淡い紅で、縁がにじむ（assets/js/petals.js の下絵と同じ形） -->
+      <linearGradient id="petal-wash" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#f4e5e0" stop-opacity=".75"/>
+        <stop offset=".45" stop-color="#e2b2b4" stop-opacity=".82"/>
+        <stop offset="1" stop-color="#b85c6c" stop-opacity=".92"/>
       </linearGradient>
-      <linearGradient id="petal-light" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#f6c2bd"/>
-        <stop offset="1" stop-color="#e3646d"/>
-      </linearGradient>
-      <!-- 桜の花びら。左右で色を変え、Ruby の宝石のような面をつける -->
+      <filter id="petal-bleed" x="-20%" y="-20%" width="140%" height="140%">
+        <feTurbulence type="fractalNoise" baseFrequency=".8" numOctaves="2" seed="7"/>
+        <feDisplacementMap in="SourceGraphic" scale="1.4"/>
+        <feGaussianBlur stdDeviation=".35"/>
+      </filter>
       <symbol id="petal" viewBox="0 0 40 52">
-        <path fill="url(#petal-shade)" d="M20 52C6 40 0 26 4 12 7 4 14 1 18 6l2 4Z"/>
-        <path fill="url(#petal-light)" d="M20 10l2-4c4-5 11-2 14 6 4 14-2 28-16 40Z"/>
-        <path fill="#fff" opacity=".28" d="M20 10l-7 11 7 15Z"/>
+        <g filter="url(#petal-bleed)">
+          <path fill="url(#petal-wash)" d="M20 51C9 44 1 30 2 17 3 7 10 2 16 4 18 5 19 7 20 10 21 7 22 5 24 4 30 2 37 7 38 17 39 30 31 44 20 51Z"/>
+          <path fill="none" stroke="#a64658" stroke-opacity=".35" stroke-width="1.4" d="M20 51C9 44 1 30 2 17 3 7 10 2 16 4 18 5 19 7 20 10 21 7 22 5 24 4 30 2 37 7 38 17 39 30 31 44 20 51Z"/>
+        </g>
       </symbol>
     </defs>
   </svg>

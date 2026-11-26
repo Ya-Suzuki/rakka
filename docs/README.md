@@ -37,10 +37,14 @@ GitHub Pages で公開するドキュメントのソース（Jekyll + [Just the 
 | `_sass/color_schemes/rakka.scss` | テーマの変数への割り当て（`_config.yml` の `color_scheme: rakka`） |
 | `_sass/custom/custom.scss` | ドキュメントページの見た目（明朝の見出し、墨のコードブロック、注記など） |
 | `_includes/title.html` | サイドバーの題字（落款 + Rakka） |
-| `assets/js/petals.js` | トップページで舞って積もる花びら（canvas 2D、ビルド不要）。ページの底（フッターの下）に波紋を立てて着地し、しばらくすると消える。フッターの一言（散っても／また咲く）を押すと、全部を巻き戻してから最初の一枚より早送りで再生し、最後は等速で今に追いつく |
+| `assets/js/petals.js` | トップページで舞って積もる花びら（canvas 2D、ビルド不要）。没骨の淡い紅で、下絵は読み込み時に作る。ページの底（フッターの下）に波紋を立てて着地し、しばらくすると消える。フッターの一言（散っても／また咲く）を押すと、全部を巻き戻してから最初の一枚より早送りで再生し、最後は等速で今に追いつく |
 
 - `.scss` には ASCII 以外の文字を書かない。Sass はビルド環境の既定の文字コードで読むので、UTF-8 でない環境では日本語のコメントでビルドが止まる。注記の見出し（`_config.yml` の `callouts`）も CSS のエスケープで書いている
 - 花びらの動きは、生まれた時刻と乱数から決まる値（イベント）と経過時間だけで決まる純粋な関数（`place`）。積もる位置も散った順番だけで決まるので、巻き戻して再生すると同じ場所に積もり直す。押せることは見せない（遊びとして、気づいた人だけのもの）。動きを減らす設定のときはキャンバスを使わず、ヒーローの静止した花びらになる
 - トップページの色を変えるときは、`landing.css` の `:root` と `setup.scss` の両方を揃える
 
 手元で確かめるときは、Ruby 3.3 で `github-pages` gem を使う（GitHub Pages と同じ Jekyll 3.10）。テーマは `remote_theme` で取りに行くので、取れない環境では `just-the-docs` gem を入れて `theme: just-the-docs` / `remote_theme: false` の設定を重ねてビルドする。
+
+## 背景の絵
+
+トップページの背景は、長谷川等伯「松林図屏風」左隻（東京国立博物館、国宝）から墨だけを取り出したもの（`assets/images/shorinzu.webp`）。元の画像は Wikimedia Commons の [Hasegawa Tohaku - Pine Trees (Shōrin-zu byōbu) - left hand screen.jpg](https://commons.wikimedia.org/wiki/File:Hasegawa_Tohaku_-_Pine_Trees_(Sh%C5%8Drin-zu_by%C5%8Dbu)_-_left_hand_screen.jpg)（パブリックドメイン）。紙の色・金襴の縁・扇の継ぎ目・落款は除き、墨の濃さを透明度にしている。

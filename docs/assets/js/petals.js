@@ -31,15 +31,120 @@ const LIFT = 1.2;         // 一枚が舞い上がるのにかける秒数。最
 const MAX_SPEED = 50;     // 早送りの上限（倍）。これより速いと、落ちる途中が見えず下端に突然現れて見える
 const RAMP = 1.2;         // 等速と上限の間を加速・減速するのにかける秒数
 const CATCH_UP = 10;      // 最後に等速で再生する長さ（元の時間で秒）
-const SIZE = 0.62;        // 花びらの大きさ（40 × 52 の形に掛ける倍率）
+const SIZE = 0.62;        // 花びらの大きさ（40 × 52 の下絵に掛ける倍率）
 
-// 桜の花びら。左右で色を変え、Ruby の宝石のような面をひとつだけつける（40 × 52）
-const LEFT = new Path2D('M20 52C6 40 0 26 4 12 7 4 14 1 18 6l2 4Z');
-const RIGHT = new Path2D('M20 10l2-4c4-5 11-2 14 6 4 14-2 28-16 40Z');
-const FACET = new Path2D('M20 10l-7 11 7 15Z');
-const FRONT = ['#b42833', '#ee9aa0']; // 表（濃い面・明るい面）
-const BACK = ['#e9868d', '#c23a45'];  // 裏は濃淡が入れ替わる
-const RIPPLE_COLOR = '#9a3540';        // 波紋の線（朱を墨に寄せた色）
+const SPRITES = 8;        // 花びらの描き分けの数（ひとつずつ、にじみ方が違う）
+const SPRITE_RES = 4;     // 下絵の解像度（1 単位あたりの px）
+const PAD = 4;            // 下絵の余白（にじみが外へ広がる分）
+
+// 桜の花びらの輪郭（40 × 52、根元が下、上端に浅い切れ込み）。三次ベジェの列
+const OUTLINE = [
+  [20, 51], [9, 44, 1, 30, 2, 17], [3, 7, 10, 2, 16, 4], [18, 5, 19, 7, 20, 10],
+  [21, 7, 22, 5, 24, 4], [30, 2, 37, 7, 38, 17], [39, 30, 31, 44, 20, 51]
+];
+const INK = 'rgba(43, 39, 36, 1)'; // 墨（波紋の線）
+
+// --- 花びらの下絵: 没骨（輪郭線を引かない）の淡い紅。縁に顔料が溜まり、紙の上で粒立つ ---
+function makeSprites() {
+  const list = [];
+  for (let i = 0; i < SPRITES; i++) list.push(makeSprite(i));
+  return list;
+}
+
+function makeSprite(index) {
+  let seed = 7919 * (index + 1);
+  const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const R = SPRITE_RES;
+  const w = (40 + PAD * 2) * R, h = (52 + PAD * 2) * R;
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d');
+
+  // 輪郭をなぞって点にし、少しだけ揺らす（筆の当たりの不揃い）
+  const pts = [];
+  let [px, py] = OUTLINE[0];
+  for (let s = 1; s < OUTLINE.length; s++) {
+    const [x1, y1, x2, y2, x3, y3] = OUTLINE[s];
+    for (let n = 1; n <= 14; n++) {
+      const t = n / 14, u = 1 - t;
+      pts.push([u * u * u * px + 3 * u * u * t * x1 + 3 * u * t * t * x2 + t * t * t * x3,
+                u * u * u * py + 3 * u * u * t * y1 + 3 * u * t * t * y2 + t * t * t * y3]);
+    }
+    px = x3; py = y3;
+  }
+  const waves = [rand() * 6.28, rand() * 6.28, rand() * 6.28];
+  const outline = new Path2D();
+  pts.forEach(([x, y], n) => {
+    const a = Math.atan2(y - 24, x - 20);
+    const d = 0.55 * Math.sin(a * 3 + waves[0]) + 0.35 * Math.sin(a * 7 + waves[1]) + 0.25 * Math.sin(a * 13 + waves[2]);
+    const X = x + Math.cos(a) * d, Y = y + Math.sin(a) * d;
+    if (n === 0) outline.moveTo(X, Y); else outline.lineTo(X, Y);
+  });
+  outline.closePath();
+
+  const hue = (rand() - 0.5) * 10;  // 紅の色味を少しずつ変える
+  const tone = (r, gg, b, a) => `rgba(${Math.round(r + hue)}, ${gg}, ${Math.round(b - hue)}, ${a})`;
+  g.scale(R, R);
+  g.translate(PAD, PAD);
+
+  // 1. 淡い地: 先は白く抜け、根元へ向かって紅が濃くなる
+  const wash = g.createLinearGradient(20, 2, 20, 51);
+  wash.addColorStop(0, tone(244, 229, 224, 0.72));
+  wash.addColorStop(0.45, tone(226, 178, 180, 0.82));
+  wash.addColorStop(1, tone(184, 92, 108, 0.92));
+  g.fillStyle = wash;
+  g.fill(outline);
+
+  g.save();
+  g.clip(outline);
+  // 2. 根元の濃い紅（萼に近いところ）
+  const base = g.createRadialGradient(20, 52, 0, 20, 52, 20);
+  base.addColorStop(0, tone(140, 42, 62, 0.55));
+  base.addColorStop(1, tone(168, 52, 78, 0));
+  g.fillStyle = base;
+  g.fillRect(0, 0, 40, 52);
+  // 3. 縁に溜まる顔料（にじみの輪）
+  g.filter = `blur(${1.1 * R}px)`;
+  g.strokeStyle = tone(166, 70, 88, 0.6);
+  g.lineWidth = 2.4;
+  g.stroke(outline);
+  g.filter = 'none';
+  // 4. 筋: 根元から先へ、ごく淡く
+  g.strokeStyle = tone(120, 50, 62, 0.2);
+  g.lineWidth = 0.35;
+  for (let n = -2; n <= 2; n++) {
+    g.beginPath();
+    g.moveTo(20, 50);
+    g.quadraticCurveTo(20 + n * 3, 32, 20 + n * 6.5 + (rand() - 0.5) * 2, 12 + Math.abs(n) * 2);
+    g.stroke();
+  }
+  g.restore();
+
+  // 5. 紙の上の粒立ち: 濃さを細かくむらにする
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  const img = g.getImageData(0, 0, w, h);
+  const cell = 3, cols = Math.ceil(w / cell) + 1;
+  const grain = new Float32Array(cols * (Math.ceil(h / cell) + 1)).map(() => rand());
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      if (!img.data[i + 3]) continue;
+      const gx = x / cell, gy = y / cell, x0 = gx | 0, y0 = gy | 0, fx = gx - x0, fy = gy - y0;
+      const v = (grain[y0 * cols + x0] * (1 - fx) + grain[y0 * cols + x0 + 1] * fx) * (1 - fy) +
+                (grain[(y0 + 1) * cols + x0] * (1 - fx) + grain[(y0 + 1) * cols + x0 + 1] * fx) * fy;
+      img.data[i + 3] = Math.min(255, img.data[i + 3] * (0.72 + 0.4 * v + 0.12 * (rand() - 0.5)));
+    }
+  }
+  g.putImageData(img, 0, 0);
+
+  // 6. 紙ににじむ: 全体の縁をわずかにぼかす
+  const out = document.createElement('canvas');
+  out.width = w; out.height = h;
+  const o = out.getContext('2d');
+  o.filter = `blur(${0.35 * R}px)`;
+  o.drawImage(c, 0, 0);
+  return out;
+}
 
 function start() {
   const canvas = document.createElement('canvas');
@@ -47,6 +152,8 @@ function start() {
   if (!ctx) return;
   canvas.className = 'petal-canvas';
   canvas.setAttribute('aria-hidden', 'true');
+
+  const sprites = makeSprites();
 
   // --- イベントの列 ---
   let seed = 20261117;
@@ -83,7 +190,8 @@ function start() {
       restRot: random() * Math.PI * 2,
       restYaw: (random() - 0.5) * 1.6 + (random() < 0.4 ? Math.PI : 0),
       restPitch: (random() - 0.5) * 1.1,
-      alpha: 0.88 + shade * 0.07, // 花びらごとのわずかな濃淡
+      alpha: 0.82 + shade * 0.14, // 花びらごとのわずかな濃淡
+      sprite: Math.floor(shade * SPRITES) % SPRITES,
       jitter: (random() - 0.5) * 6,
       piled: false, lift: 0
     };
@@ -159,7 +267,7 @@ function start() {
     return replayTime(clock - modeStart) - (p.born - replayFrom);
   }
 
-  // 花びら一枚を描く。翻る（rotY）と横幅が縮み、裏返ると裏の色になる
+  // 花びら一枚を描く。翻る（rotY）と横幅が縮み、裏を向くと淡くなる
   function draw(p, s, fade) {
     const flip = Math.cos(s.rotY);
     const k = SIZE * p.scale;
@@ -167,30 +275,26 @@ function start() {
     ctx.translate(s.x, s.y);
     ctx.rotate(s.rotZ);
     ctx.scale(k * Math.max(0.08, Math.abs(flip)), k);
-    ctx.translate(-20, -26);
-    ctx.globalAlpha = p.alpha * fade;
-    const front = flip >= 0;
-    ctx.fillStyle = front ? FRONT[0] : BACK[0];
-    ctx.fill(LEFT);
-    ctx.fillStyle = front ? FRONT[1] : BACK[1];
-    ctx.fill(RIGHT);
-    ctx.globalAlpha = 0.25 * fade;
-    ctx.fillStyle = '#fff';
-    ctx.fill(FACET);
+    ctx.globalAlpha = p.alpha * fade * (flip >= 0 ? 1 : 0.7);
+    ctx.drawImage(sprites[p.sprite], -20 - PAD, -26 - PAD, 40 + PAD * 2, 52 + PAD * 2);
   }
 
-  // 波紋: 水面を斜めから見た平たい楕円が、広がりながら薄くなる
+  // 波紋: 水面を斜めから見た平たい楕円。墨の細い線と、その周りの淡いにじみ
   function ripple(p, s, since) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = INK;
     for (const delay of RINGS) {
       const u = (since - delay) / RIPPLE;
       if (u <= 0 || u >= 1) continue;
       const r = (6 + 46 * (1 - Math.pow(1 - u, 2.2))) * (0.7 + 0.5 * p.scale);
-      ctx.globalAlpha = 0.42 * Math.pow(1 - u, 1.6) * (1 - delay);
-      ctx.strokeStyle = RIPPLE_COLOR;
+      const a = 0.3 * Math.pow(1 - u, 1.6) * (1 - delay);
       ctx.beginPath();
       ctx.ellipse(s.x, s.y + 4, r, r * 0.26, 0, 0, Math.PI * 2);
+      ctx.globalAlpha = a * 0.25;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.globalAlpha = a;
+      ctx.lineWidth = 0.8;
       ctx.stroke();
     }
   }

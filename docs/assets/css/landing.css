@@ -35,6 +35,20 @@ body {
 
 ::selection { background: var(--sakura); color: var(--sumi); }
 
+/* 背景: 長谷川等伯「松林図屏風」左隻の墨だけを取り出したもの（パブリックドメイン）。
+   紙の色はページの和紙に任せ、上へ行くほど霞に溶かす */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: url("../images/shorinzu.webp") 50% 100% / cover no-repeat;
+  opacity: 0.2;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 45%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 45%);
+}
+
 a { color: var(--shu); text-decoration-color: rgba(173, 31, 42, 0.35); text-underline-offset: 0.2em; }
 a:hover { text-decoration-color: var(--shu); }
 
