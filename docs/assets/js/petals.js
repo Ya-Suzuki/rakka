@@ -1,7 +1,8 @@
 /*
  * 落花: 桜の花びらが舞いながら散り、ページの底（フッターの下）に積もる。
  * 途中を読んでいる間は画面の下を通り抜けて見えなくなり、最後までスクロールすると山が見える。
- * 積もった花びらはしばらくすると消える（散って、積もって、消えるまでが一枚の一生）。
+ * 着地すると水面のような波紋が広がり、積もった花びらはしばらくすると消える
+ * （散って、積もって、消えるまでが一枚の一生）。
  *
  * フッターの一言を押すと、イベントを最初から再生して山を作り直す:
  *   1. 巻き戻し: 全部の花びらが、新しいものから順に舞い上がる（状態を捨てる）
@@ -23,6 +24,8 @@ const HEAP_MAX = 40;      // 山の高さの上限（px）
 const PILE_MAX = 24;      // 一度に積もっている枚数の上限。超えたら画面の外へ落ちて消える
 const STAY = 150;         // 積もってから消え始めるまでの秒数（散って、積もって、消えるまでが一枚の一生）
 const FADE = 6;           // 消えるのにかける秒数
+const RIPPLE = 2.8;       // 着地の波紋が広がって消えるまでの秒数
+const RINGS = [0, 0.35, 0.7]; // 波紋の輪ごとの遅れ（秒）
 const REWIND = 2.4;       // 巻き戻しにかける秒数（全体）
 const LIFT = 1.2;         // 一枚が舞い上がるのにかける秒数。最後に散ったものから順に、ずらして上がる
 const MAX_SPEED = 50;     // 早送りの上限（倍）。これより速いと、落ちる途中が見えず下端に突然現れて見える
@@ -36,6 +39,7 @@ const RIGHT = new Path2D('M20 10l2-4c4-5 11-2 14 6 4 14-2 28-16 40Z');
 const FACET = new Path2D('M20 10l-7 11 7 15Z');
 const FRONT = ['#b42833', '#ee9aa0']; // 表（濃い面・明るい面）
 const BACK = ['#e9868d', '#c23a45'];  // 裏は濃淡が入れ替わる
+const RIPPLE_COLOR = '#9a3540';        // 波紋の線（朱を墨に寄せた色）
 
 function start() {
   const canvas = document.createElement('canvas');
@@ -175,6 +179,22 @@ function start() {
     ctx.fill(FACET);
   }
 
+  // 波紋: 水面を斜めから見た平たい楕円が、広がりながら薄くなる
+  function ripple(p, s, since) {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.lineWidth = 1;
+    for (const delay of RINGS) {
+      const u = (since - delay) / RIPPLE;
+      if (u <= 0 || u >= 1) continue;
+      const r = (6 + 46 * (1 - Math.pow(1 - u, 2.2))) * (0.7 + 0.5 * p.scale);
+      ctx.globalAlpha = 0.42 * Math.pow(1 - u, 1.6) * (1 - delay);
+      ctx.strokeStyle = RIPPLE_COLOR;
+      ctx.beginPath();
+      ctx.ellipse(s.x, s.y + 4, r, r * 0.26, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+
   let drawn = 0;
 
   // draw が false なら状態だけ進める（テストの早送りで、途中のフレームは描かない）
@@ -187,6 +207,20 @@ function start() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       drawn = 0;
     }
+    // 着地した花びらの波紋（花びらより下に描く）。着地からの経過時間だけで決まるので、
+    // 巻き戻しでは輪が縮んで消え、再生では同じ波紋がもう一度広がる
+    if (paint) {
+      for (let i = 0; i < petals.length; i++) {
+        const p = petals[i];
+        if (!p.piled) continue;
+        const since = elapsed(p, i) - p.dur;
+        if (since < 0 || since > RIPPLE + RINGS[RINGS.length - 1]) continue;
+        const s = place(p, p.dur);
+        if (s.y > H + 40 || s.y < -40) continue;
+        ripple(p, s, since);
+      }
+    }
+
     let done = true;
     for (let i = 0; i < petals.length; i++) {
       const p = petals[i];
@@ -300,6 +334,7 @@ function start() {
       const flying = petals.filter((p, i) => { const t = mode === 'rewind' ? -1 : elapsed(p, i); return t >= 0 && t < p.dur; }).length;
       return {
         mode, count: petals.length, piled: countPiled(), flying, drawn,
+        justLanded: petals.some((p, i) => { const d = elapsed(p, i) - p.dur; return p.piled && d >= 0 && d < 0.1; }),
         replayTime: mode === 'replay' ? replayTime(clock - modeStart) : null, replayLength,
         // 積もる位置（ページ上の座標。スクロール位置によらない）
         rests: petals.filter((p) => p.piled).map((p) => [Math.round((p.x + p.drift) * W), Math.round(docH - 10 - p.lift)]),
