@@ -1,0 +1,22 @@
+// Rakka palette (washi paper, sumi ink, Ruby vermilion).
+// Loaded before every color scheme, so the light/dark stylesheets the theme also
+// builds (their callouts refer to these colors) compile too.
+// Keep SCSS files ASCII-only: Sass reads them in the build's default encoding.
+
+$washi: #f7f2e9;      // paper
+$washi-deep: #efe7da; // sidebar, table headers
+$washi-line: #e2d7c5; // rules
+$sumi: #231f1c;       // headings
+$sumi-soft: #3e3732;  // body text
+$nezumi: #7a6f64;     // secondary text
+$shu: #ad1f2a;        // Ruby vermilion: links, emphasis
+$shu-bright: #c9343f;
+$sakura: #f1c4c0;     // pale petal
+
+// Callout colors, used as `color: shu / sumi / kitsune` in _config.yml
+$shu-000: #fbeceb;
+$shu-300: $shu;
+$sumi-000: #f0ebe3;
+$sumi-300: $sumi-soft;
+$kitsune-000: #f8eedb;
+$kitsune-300: #9a5b13;

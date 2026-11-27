@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="{{ page.lang | default: site.lang }}">
+{%- assign t = site.data.landing[page.lang] -%}
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  {% seo %}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Shippori+Mincho+B1:wght@500;700;800&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Yuji+Syuku&text=%E8%90%BD%E8%8A%B1&display=swap">
+  <link rel="icon" href="{{ '/assets/images/rakkan.svg' | relative_url }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ '/assets/css/landing.css' | relative_url }}">
+  {%- include lang_twin.html %}
+  <link rel="alternate" hreflang="{{ page.lang }}" href="{{ page.url | absolute_url }}">
+  <link rel="alternate" hreflang="{{ twin_lang }}" href="{{ twin_url | absolute_url }}">
+</head>
+<body>
+  <!-- 背景: 屏風に花びらが散り、水面に落ちて波紋が広がる（_video/ の Remotion で作る）。
+       もう1本は同じ動画を逆向きにしたもの。フッターの一言を押すと、逆向きの動画で最初まで巻き戻す -->
+  <video class="byobu byobu--play" muted loop playsinline preload="auto" aria-hidden="true" tabindex="-1"
+         poster="{{ '/assets/video/rakka.jpg' | relative_url }}">
+    <source src="{{ '/assets/video/rakka.mp4' | relative_url }}" type="video/mp4">
+  </video>
+  <video class="byobu byobu--rewind" muted playsinline preload="none" aria-hidden="true" tabindex="-1">
+    <source src="{{ '/assets/video/rakka-rewind.mp4' | relative_url }}" type="video/mp4">
+  </video>
+
+  <header class="topbar">
+    <a class="brand" href="{{ page.url | relative_url }}"><span class="rakkan" aria-hidden="true">落花</span>Rakka</a>
+    <nav class="topnav" aria-label="{{ t.nav_label }}">
+      {%- for item in t.nav %}
+      <a href="{{ item.href }}">{{ item.label }}</a>
+      {%- endfor %}
+      <a href="https://github.com/Ya-Suzuki/rakka">GitHub</a>
+      <a class="lang" href="{{ t.switch.href | relative_url }}" hreflang="{{ t.switch.lang }}" lang="{{ t.switch.lang }}">{{ t.switch.label }}</a>
+    </nav>
+  </header>
+
+  <section class="hero">
+    <div class="hero__inner">
+      <p class="hero__title" lang="ja" aria-label="落花（{{ t.reading }}）">
+        <ruby>落花<rt>{{ t.reading }}</rt></ruby>
+      </p>
+
+      <div class="hero__body">
+        <p class="eyebrow">{{ t.eyebrow }}</p>
+        <h1>{% for line in t.headline %}{{ line }}<br>{% endfor %}<em>{{ t.headline_em }}</em></h1>
+        <p class="lead">{{ t.lead }}</p>
+        <div class="cta">
+          <a class="btn btn--shu" href="getting-started.html">{{ t.cta_primary }}</a>
+          <a class="btn btn--line" href="concepts/actors-and-ractors.html">{{ t.cta_secondary }}</a>
+        </div>
+        <p class="install"><code>gem "rakka", github: "Ya-Suzuki/rakka", glob: "rakka-core/*.gemspec"</code></p>
+      </div>
+    </div>
+  </section>
+
+  <main>
+    <section class="tenets" aria-labelledby="tenets-title">
+      <h2 id="tenets-title" class="section-title"><span>{{ t.tenets_title }}</span></h2>
+      <ol class="tenet-list">
+        {%- for tenet in t.tenets %}
+        <li>
+          {%- if tenet.title %}
+          <span class="kanji" lang="ja" aria-hidden="true">{{ tenet.kanji }}</span>
+          <h3>{{ tenet.title }}</h3>
+          {%- else %}
+          <h3 class="kanji" lang="ja">{{ tenet.kanji }}</h3>
+          {%- endif %}
+          <p>{{ tenet.body }}</p>
+        </li>
+        {%- endfor %}
+      </ol>
+    </section>
+
+    <section class="code" aria-labelledby="code-title">
+      <div class="code__text">
+        <h2 id="code-title" class="section-title section-title--left"><span>{{ t.code_title }}</span></h2>
+        <ul>
+          {%- for point in t.code_points %}
+          <li>{{ point }}</li>
+          {%- endfor %}
+        </ul>
+      </div>
+      <div class="code__card">
+        <div class="code__bar" aria-hidden="true"><i></i><i></i><i></i><span>bank_account.rb</span></div>
+        {{ content }}
+      </div>
+    </section>
+
+    <section class="numbers" aria-label="{{ t.numbers_label }}">
+      {%- for n in t.numbers %}
+      <div>
+        <p class="num"><b>{{ n.from }}</b><small>{{ n.from_unit }}</small> <span class="arrow">→</span> <b>{{ n.to }}</b><small>{{ n.to_unit }}</small></p>
+        <p>{{ n.text }}</p>
+      </div>
+      {%- endfor %}
+    </section>
+
+    <section class="paths" aria-labelledby="paths-title">
+      <h2 id="paths-title" class="section-title"><span>{{ t.paths_title }}</span></h2>
+      <div class="path-list">
+        {%- for path in t.paths %}
+        <a href="{{ path.href }}"><b>{{ path.title }}</b><span>{{ path.text }}</span></a>
+        {%- endfor %}
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p class="footer__poem{% if t.name.vertical %} footer__poem--vertical{% endif %}" data-replay-label="{{ t.name.replay_label }}">{% for line in t.name.poem %}<span>{{ line }}</span>{% endfor %}</p>
+    <p>{{ t.footer }}<br>MIT License &middot; <a href="https://github.com/Ya-Suzuki/rakka">GitHub</a> &middot; <a href="{{ t.switch.href | relative_url }}" hreflang="{{ t.switch.lang }}" lang="{{ t.switch.lang }}">{{ t.switch.label }}</a></p>
+  </footer>
+  <script src="{{ '/assets/js/byobu.js' | relative_url }}"></script>
+</body>
+</html>

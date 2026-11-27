@@ -1,0 +1,16 @@
+{%- comment -%}
+  Sets `twin_url` and `twin_lang`: the same page in the other language.
+  Japanese pages live at the root, English pages under /en/.
+{%- endcomment -%}
+{%- if page.lang == 'en' -%}
+  {%- assign twin_lang = 'ja' -%}
+  {%- assign twin_url = page.url | remove_first: '/en' -%}
+  {%- if twin_url == '' -%}{%- assign twin_url = '/' -%}{%- endif -%}
+{%- else -%}
+  {%- assign twin_lang = 'en' -%}
+  {%- assign twin_url = page.url | prepend: '/en' -%}
+{%- endif -%}
+{%- assign twin_page = site.html_pages | where: 'url', twin_url | first -%}
+{%- unless twin_page -%}
+  {%- if twin_lang == 'en' -%}{%- assign twin_url = '/en/' -%}{%- else -%}{%- assign twin_url = '/' -%}{%- endif -%}
+{%- endunless -%}

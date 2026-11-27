@@ -7,6 +7,8 @@ Akkaにインスパイアされた設計で、少数のRactor上に多数の軽�
 
 名前の由来: **Ra**ctor + **Akka** = **Rakka**
 
+ドキュメント: https://ya-suzuki.github.io/rakka/ （仕組みの解説やよくある疑問はこちら。English: https://ya-suzuki.github.io/rakka/en/ ）
+
 ## 特徴
 
 - **Ractor Native**: GVLを回避した真の並列処理
@@ -27,7 +29,8 @@ Akkaにインスパイアされた設計で、少数のRactor上に多数の軽�
 rakka/
 ├── rakka-core/               # コアライブラリ (gem "rakka")
 ├── rakka-rails/              # Rails統合 (gem "rakka-rails")
-└── examples/auction_house/   # Railsのサンプルアプリ
+├── examples/auction_house/   # Railsのサンプルアプリ
+└── docs/                     # ドキュメントサイト（GitHub Pages）
 ```
 
 ## サンプルアプリ

@@ -1,0 +1,57 @@
+title: Rakka
+description: Ruby 4.0 の Ractor で動くアクター型イベントソーシングライブラリ
+lang: ja
+
+# 日本語はルート、英語は /en/ 以下。対訳ページは URL の /en の有無で対応させる
+defaults:
+  - scope:
+      path: ""
+    values:
+      lang: ja
+  - scope:
+      path: "en"
+    values:
+      lang: en
+
+# GitHub Pages でビルドする（Settings → Pages → Deploy from a branch → main /docs）
+remote_theme: just-the-docs/just-the-docs@v0.12.0
+plugins:
+  - jekyll-remote-theme
+  # テーマが使うプラグイン。gemのテーマなら自動で読まれるが、remote_themeでは明示が要る
+  - jekyll-include-cache
+  - jekyll-seo-tag
+
+color_scheme: rakka
+
+# 注記。色は _sass/custom/setup.scss の $shu / $sumi / $kitsune。見出し（メモ・Note など）は言語で変わるので custom.scss で付ける
+callouts:
+  note:
+    color: sumi
+  important:
+    color: shu
+  warning:
+    color: kitsune
+
+search_enabled: true
+search:
+  heading_level: 3
+  previews: 2
+  # 日本語は単語に区切られないので、記号でも区切って部分一致を拾いやすくする
+  tokenizer_separator: /[\s\-/、。（）「」・]+/
+
+aux_links:
+  GitHub: https://github.com/Ya-Suzuki/rakka
+aux_links_new_tab: true
+
+gh_edit_link: true
+gh_edit_link_text: このページを編集
+gh_edit_repository: https://github.com/Ya-Suzuki/rakka
+gh_edit_branch: main
+gh_edit_source: docs
+gh_edit_view_mode: edit
+
+back_to_top: true
+back_to_top_text: ページの先頭へ
+
+exclude:
+  - README.md

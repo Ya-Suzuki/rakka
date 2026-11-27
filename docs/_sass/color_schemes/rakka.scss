@@ -1,0 +1,21 @@
+// Rakka color scheme. Imported after the light scheme, so these override it.
+// Color names are defined in custom/setup.scss.
+
+$body-background-color: $washi;
+$sidebar-color: $washi-deep;
+$body-heading-color: $sumi;
+$body-text-color: $sumi-soft;
+$link-color: $shu;
+$nav-child-link-color: $sumi-soft;
+$base-button-color: $washi;
+$btn-primary-color: $shu;
+$code-background-color: #211d1a;
+$feedback-color: darken($washi-deep, 3%);
+$table-background-color: $washi;
+$search-background-color: $washi;
+$search-result-preview-color: $nezumi;
+$border-color: $washi-line;
+
+$body-font-family: "Zen Kaku Gothic New", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+$mono-font-family: "JetBrains Mono", "SFMono-Regular", menlo, consolas, monospace;
+$content-line-height: 1.85;
